@@ -2,6 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { Readable } from 'stream';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 /**
  * Speech-to-Text Service
@@ -36,54 +39,94 @@ export class SttService {
       throw new Error('OpenAI API key not configured. STT service unavailable.');
     }
 
+    let tempFilePath: string | null = null;
+
     try {
       // Log audio details for debugging
       const audioSizeKB = (audioBuffer.length / 1024).toFixed(2);
       this.logger.debug(`[STT] Transcribing audio: ${filename}, size: ${audioSizeKB} KB (${audioBuffer.length} bytes)`);
 
-      // Warn if audio is too short (might be incomplete)
-      if (audioBuffer.length < 1000) {
-        this.logger.warn(`[STT] Audio file is very small (${audioBuffer.length} bytes) - might be incomplete or too short`);
+      // ✅ Backend validation: Reject early with clear reason
+      if (!audioBuffer || audioBuffer.length === 0) {
+        this.logger.error(`[STT] Audio buffer is empty`);
+        throw new Error('Audio too short or invalid format: Empty audio buffer received.');
+      }
+
+      // Minimum size check (10KB = 10,000 bytes as per best practice)
+      const MIN_AUDIO_SIZE = 10_000;
+      if (audioBuffer.length < MIN_AUDIO_SIZE) {
+        this.logger.warn(`[STT] Audio file is too small: ${audioBuffer.length} bytes (minimum: ${MIN_AUDIO_SIZE} bytes)`);
+        throw new Error(`Audio too short or invalid format: Recording is ${(audioBuffer.length / 1024).toFixed(2)} KB, minimum required is ${(MIN_AUDIO_SIZE / 1024).toFixed(2)} KB. Please record for at least 1-2 seconds.`);
+      }
+
+      // Check if audio buffer looks valid (not all zeros or all same value)
+      const uniqueBytes = new Set(audioBuffer.slice(0, Math.min(100, audioBuffer.length)));
+      if (uniqueBytes.size < 3) {
+        this.logger.warn(`[STT] Audio buffer appears to be invalid (too few unique values: ${uniqueBytes.size})`);
+        throw new Error('Audio too short or invalid format: Audio appears to be silent or corrupted. Please check your microphone and try again.');
       }
 
       // Create a File object for OpenAI SDK
-      // Node.js 18+ has File globally, but we'll handle both cases
+      // Use a more reliable approach: write to temp file and create File from it
+      // This ensures proper file format for OpenAI API
       const uint8Array = new Uint8Array(audioBuffer);
-
+      const mimeType = this.getMimeType(filename);
+      
       let file: File | any;
-      if (typeof File !== 'undefined') {
-        // Node.js 18+ has File globally
-        file = new File([uint8Array], filename, {
-          type: this.getMimeType(filename),
-        });
-      } else {
-        // Fallback for older Node.js versions
-        // Create a File-like object that OpenAI SDK can use
-        const Blob = require('buffer').Blob || global.Blob;
-        if (Blob) {
-          const blob = new Blob([uint8Array], { type: this.getMimeType(filename) });
-          file = Object.assign(blob, { name: filename });
+
+      try {
+        // Method 1: Try using Node.js 18+ native File API (most reliable)
+        if (typeof File !== 'undefined' && File.prototype) {
+          try {
+            file = new File([uint8Array], filename, {
+              type: mimeType,
+            });
+            this.logger.debug(`[STT] Using native File API`);
+          } catch (e) {
+            this.logger.warn(`[STT] Native File API failed: ${e.message}`);
+            throw e; // Fall through to temp file method
+          }
         } else {
-          // Last resort: create a minimal File-like object
-          file = {
-            name: filename,
-            type: this.getMimeType(filename),
-            size: audioBuffer.length,
-            stream: () => Readable.from(audioBuffer),
-            arrayBuffer: async () => audioBuffer.buffer.slice(
-              audioBuffer.byteOffset,
-              audioBuffer.byteOffset + audioBuffer.byteLength
-            ),
-            text: async () => '',
-            slice: (start?: number, end?: number) => {
-              const sliced = audioBuffer.slice(start, end);
-              return Object.assign(
-                { name: filename, type: this.getMimeType(filename), size: sliced.length },
-                { arrayBuffer: async () => sliced.buffer.slice(sliced.byteOffset, sliced.byteOffset + sliced.byteLength) }
-              );
-            },
-          };
+          throw new Error('File API not available');
         }
+      } catch (e) {
+        // Method 2: Write to temp file and create File from it (more reliable for OpenAI)
+        this.logger.debug(`[STT] Using temp file method for File creation`);
+        try {
+          // Create temp file
+          tempFilePath = path.join(os.tmpdir(), `stt-${Date.now()}-${filename}`);
+          fs.writeFileSync(tempFilePath, audioBuffer);
+          
+          // Read back as File using Node.js File API if available
+          if (typeof File !== 'undefined') {
+            const fileBuffer = fs.readFileSync(tempFilePath);
+            file = new File([fileBuffer], filename, {
+              type: mimeType,
+            });
+            this.logger.debug(`[STT] Created File from temp file`);
+          } else {
+            // Fallback to File-like object
+            file = this.createFileLikeObject(uint8Array, filename, mimeType, audioBuffer);
+          }
+        } catch (tempFileError: any) {
+          this.logger.error(`[STT] Temp file method failed: ${tempFileError.message}`);
+          // Last resort: File-like object
+          file = this.createFileLikeObject(uint8Array, filename, mimeType, audioBuffer);
+        }
+      }
+
+      // Validate the file object has required methods
+      if (!file || typeof file.arrayBuffer !== 'function') {
+        this.logger.error(`[STT] File object creation failed - missing required methods`);
+        // Clean up temp file if created
+        if (tempFilePath && fs.existsSync(tempFilePath)) {
+          try {
+            fs.unlinkSync(tempFilePath);
+          } catch (e) {
+            // Ignore cleanup errors
+          }
+        }
+        throw new Error('Failed to create audio file object for transcription. Please check audio format.');
       }
 
       // Enhanced prompt with domain terms, numbers, and common phrases
@@ -94,28 +137,91 @@ Common phrases: "I want to book", "book an appointment", "schedule", "appointmen
 The user might say topic names, numbers, or full sentences.`;
 
       try {
+        // Log file object details for debugging
+        this.logger.debug(`[STT] File object details: name=${file.name}, type=${file.type}, size=${file.size}`);
+        this.logger.debug(`[STT] File object has arrayBuffer: ${typeof file.arrayBuffer === 'function'}`);
+        this.logger.debug(`[STT] File object has stream: ${typeof file.stream === 'function'}`);
+
+        // Try using the stream method if available, as it might work better with WebM
+        // Otherwise fall back to File object
+        let fileInput: File | Readable = file;
+        if (typeof file.stream === 'function') {
+          try {
+            const stream = file.stream();
+            if (stream && typeof stream.pipe === 'function') {
+              this.logger.debug(`[STT] Using stream method for file input`);
+              fileInput = stream as any;
+            }
+          } catch (streamError) {
+            this.logger.debug(`[STT] Stream method failed, using File object: ${streamError.message}`);
+            fileInput = file;
+          }
+        }
+
+        // Try transcription with minimal parameters first to avoid format issues
+        // Remove language parameter as it can sometimes cause issues with certain audio formats
         const transcription = await this.openai.audio.transcriptions.create({
-          file: file,
+          file: fileInput as any, // OpenAI SDK accepts both File and Readable
           model: 'whisper-1',
-          language: 'en', // Specify language for better accuracy
+          // Removed language parameter - let Whisper auto-detect (can cause issues with WebM)
           response_format: 'text',
           prompt: enhancedPrompt,
           temperature: 0.0, // Lower temperature for more accurate transcription
         });
 
-        const text = transcription as unknown as string;
+        // Handle different response formats
+        let text: string;
+        if (typeof transcription === 'string') {
+          text = transcription;
+        } else if (transcription && typeof transcription === 'object' && 'text' in transcription) {
+          text = (transcription as any).text;
+        } else {
+          text = String(transcription);
+        }
+        
+        // Log raw response before processing
+        this.logger.debug(`[STT] Raw transcription response type: ${typeof transcription}`);
+        this.logger.debug(`[STT] Raw transcription response (first 200 chars): "${String(text).substring(0, 200)}"`);
+        this.logger.debug(`[STT] Raw transcription response (hex preview): ${Buffer.from(String(text).substring(0, 50)).toString('hex')}`);
+        
         const trimmedText = text.trim();
+        
+        // Log trimmed text with character codes for debugging
+        if (trimmedText.length > 0) {
+          const firstChars = trimmedText.substring(0, Math.min(20, trimmedText.length));
+          const charCodes = Array.from(firstChars).map(c => c.charCodeAt(0)).join(',');
+          this.logger.debug(`[STT] Trimmed text: "${trimmedText.substring(0, 100)}" (length: ${trimmedText.length}, first 20 char codes: ${charCodes})`);
+        }
 
         // Validate transcription - check for garbage characters
-        const isValidTranscription = /[\w\s.,!?;:'"()-]/.test(trimmedText) && trimmedText.length > 0;
+        // Check if the text contains mostly non-ASCII or invalid characters
+        const hasValidChars = /[\w\s.,!?;:'"()-]/.test(trimmedText);
+        const hasOnlyInvalidChars = trimmedText.match(/^[^\w\s.,!?;:'"()-]+$/);
+        const hasRepeatedInvalidChars = trimmedText.match(/^([^\w\s.,!?;:'"()-])\1{5,}$/); // Same invalid char repeated 6+ times
 
-        if (!isValidTranscription || trimmedText.match(/^[^\w\s]+$/)) {
-          this.logger.error(`[STT] Invalid transcription detected: "${trimmedText}" - likely audio format/encoding issue`);
+        if (!trimmedText || trimmedText.length === 0) {
+          this.logger.error(`[STT] Empty transcription - audio might be silent or too short`);
+          throw new Error('No speech detected in the audio. Please speak clearly and try again.');
+        }
+
+        if (!hasValidChars || hasOnlyInvalidChars || hasRepeatedInvalidChars) {
+          this.logger.error(`[STT] Invalid transcription detected: "${trimmedText.substring(0, 50)}" (length: ${trimmedText.length})`);
           this.logger.error(`[STT] Audio file: ${filename}, size: ${audioSizeKB} KB`);
-          throw new Error(`STT transcription returned invalid text. This might be due to:\n1. Audio format/encoding issue\n2. Very short or silent audio\n3. Microphone quality issue\n\nPlease try:\n- Speaking more clearly\n- Using text mode\n- Checking microphone settings`);
+          this.logger.error(`[STT] This usually indicates an audio format/encoding issue or corrupted audio data`);
+          throw new Error(`STT transcription returned invalid text. This might be due to:\n1. Audio format/encoding issue\n2. Very short or silent audio\n3. Microphone quality issue\n4. Corrupted audio data\n\nPlease try:\n- Speaking more clearly\n- Using text mode\n- Checking microphone settings\n- Ensuring good internet connection`);
         }
 
         this.logger.log(`[STT] Transcription successful: "${trimmedText}" (full length: ${trimmedText.length})`);
+
+        // Clean up temp file if created
+        if (tempFilePath && fs.existsSync(tempFilePath)) {
+          try {
+            fs.unlinkSync(tempFilePath);
+            this.logger.debug(`[STT] Cleaned up temp file: ${tempFilePath}`);
+          } catch (e) {
+            this.logger.warn(`[STT] Failed to clean up temp file: ${e.message}`);
+          }
+        }
 
         return trimmedText;
       } catch (apiError: any) {
@@ -150,6 +256,16 @@ The user might say topic names, numbers, or full sentences.`;
         }
       }
     } catch (error: any) {
+      // Clean up temp file if created (in case of error)
+      if (typeof tempFilePath === 'string' && tempFilePath && fs.existsSync(tempFilePath)) {
+        try {
+          fs.unlinkSync(tempFilePath);
+          this.logger.debug(`[STT] Cleaned up temp file after error: ${tempFilePath}`);
+        } catch (e) {
+          // Ignore cleanup errors
+        }
+      }
+      
       this.logger.error(`STT transcription failed: ${error.message}`, error.stack);
       // Re-throw with more context if it's not already a formatted error
       if (error.message.includes('OpenAI API') || error.message.includes('502') || error.message.includes('rate limit')) {
@@ -157,6 +273,55 @@ The user might say topic names, numbers, or full sentences.`;
       }
       throw new Error(`Failed to transcribe audio: ${error.message}`);
     }
+  }
+
+  /**
+   * Create a File-like object compatible with OpenAI SDK
+   */
+  private createFileLikeObject(
+    uint8Array: Uint8Array,
+    filename: string,
+    mimeType: string,
+    audioBuffer: Buffer,
+  ): any {
+    // Create a proper File-like object with all required methods
+    const fileLike = {
+      name: filename,
+      type: mimeType,
+      size: audioBuffer.length,
+      lastModified: Date.now(),
+      
+      // Required method: arrayBuffer
+      arrayBuffer: async (): Promise<ArrayBuffer> => {
+        // Create a new ArrayBuffer from the audio buffer to avoid SharedArrayBuffer issues
+        const newBuffer = new ArrayBuffer(audioBuffer.length);
+        const view = new Uint8Array(newBuffer);
+        view.set(audioBuffer);
+        return newBuffer;
+      },
+      
+      // Required method: stream
+      stream: (): Readable => {
+        return Readable.from(audioBuffer);
+      },
+      
+      // Required method: text
+      text: async (): Promise<string> => {
+        return '';
+      },
+      
+      // Required method: slice
+      slice: (start?: number, end?: number): any => {
+        const sliced = audioBuffer.slice(start, end);
+        const slicedUint8 = new Uint8Array(sliced);
+        return this.createFileLikeObject(slicedUint8, filename, mimeType, sliced);
+      },
+      
+      // Symbol.toStringTag for better compatibility
+      [Symbol.toStringTag]: 'File',
+    };
+
+    return fileLike;
   }
 
   /**

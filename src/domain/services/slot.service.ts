@@ -26,18 +26,35 @@ export class SlotService {
     let availableSlots: Slot[];
 
     if (preference) {
-      const allSlots = this.mockCalendar.getNextAvailableSlots(50);
-      availableSlots = this.mockCalendar.findSlotsByPreference(
-        preference,
-        allSlots,
-      );
+      // If a specific date is requested, get slots directly for that date
+      if (preference.specificDate) {
+        const targetDate = new Date(preference.specificDate);
+        // Get slots for the specific date (start and end of that day)
+        const startOfDay = new Date(targetDate);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(targetDate);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        const allSlots = this.mockCalendar.getAvailableSlots(startOfDay, endOfDay);
+        availableSlots = this.mockCalendar.findSlotsByPreference(
+          preference,
+          allSlots,
+        );
+      } else {
+        // For day/time preferences without specific date, use the existing logic
+        const allSlots = this.mockCalendar.getNextAvailableSlots(50);
+        availableSlots = this.mockCalendar.findSlotsByPreference(
+          preference,
+          allSlots,
+        );
+      }
     } else {
       availableSlots = this.mockCalendar.getNextAvailableSlots(20);
     }
 
     // Filter out already booked slots
     const bookedSlotIds = new Set(bookedSlots.map((s) => s.id));
-    
+
     // Explicit validation: Only return slots that are:
     // 1. Available (isAvailable: true)
     // 2. Not already booked
@@ -46,7 +63,7 @@ export class SlotService {
       const isNotBooked = !bookedSlotIds.has(slot.id);
       const isAvailable = slot.isAvailable === true;
       const isInFuture = new Date(slot.startTime) > now;
-      
+
       return isNotBooked && isAvailable && isInFuture;
     });
 
@@ -68,11 +85,28 @@ export class SlotService {
     let availableSlots: Slot[];
 
     if (preference) {
-      const allSlots = this.mockCalendar.getNextAvailableSlots(50);
-      availableSlots = this.mockCalendar.findSlotsByPreference(
-        preference,
-        allSlots,
-      );
+      // If a specific date is requested, get slots directly for that date
+      if (preference.specificDate) {
+        const targetDate = new Date(preference.specificDate);
+        // Get slots for the specific date (start and end of that day)
+        const startOfDay = new Date(targetDate);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(targetDate);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        const allSlots = this.mockCalendar.getAvailableSlots(startOfDay, endOfDay);
+        availableSlots = this.mockCalendar.findSlotsByPreference(
+          preference,
+          allSlots,
+        );
+      } else {
+        // For day/time preferences without specific date, use the existing logic
+        const allSlots = this.mockCalendar.getNextAvailableSlots(50);
+        availableSlots = this.mockCalendar.findSlotsByPreference(
+          preference,
+          allSlots,
+        );
+      }
     } else {
       // Get more slots for reschedule scenarios (when count > 10)
       const slotPoolSize = count > 10 ? 100 : 20;
@@ -82,7 +116,7 @@ export class SlotService {
     // Filter out already booked slots
     // Note: getBookedSlotsFn already excludes the current booking if excludeBookingCode was provided
     const bookedSlotIds = new Set(bookedSlots.map((s) => s.id));
-    
+
     // Explicit validation: Only return slots that are:
     // 1. Available (isAvailable: true)
     // 2. Not already booked
@@ -91,7 +125,7 @@ export class SlotService {
       const isNotBooked = !bookedSlotIds.has(slot.id);
       const isAvailable = slot.isAvailable === true;
       const isInFuture = new Date(slot.startTime) > now;
-      
+
       return isNotBooked && isAvailable && isInFuture;
     });
 

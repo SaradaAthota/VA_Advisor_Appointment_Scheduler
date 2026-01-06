@@ -74,7 +74,15 @@ const VoiceAgentModal: React.FC<VoiceAgentModalProps> = ({ isOpen, onClose }) =>
       });
 
       if (!response.ok) {
-        throw new Error('Failed to start session');
+        // Try to get error details from response
+        let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch (e) {
+          // Response is not JSON, use status text
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -90,7 +98,14 @@ const VoiceAgentModal: React.FC<VoiceAgentModalProps> = ({ isOpen, onClose }) =>
       setState('greeting');
     } catch (error) {
       console.error('Error starting session:', error);
-      alert('Failed to start conversation. Please try again.');
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+
+      // Check if it's a network error (backend not running)
+      if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError') || errorMsg.includes('ERR_CONNECTION_REFUSED')) {
+        alert(`Cannot connect to backend server.\n\nPlease ensure:\n1. Backend server is running on ${API_BASE_URL}\n2. Run "npm run start:dev" in the backend directory\n3. Check browser console (F12) for details`);
+      } else {
+        alert(`Failed to start conversation: ${errorMsg}\n\nPlease check:\n1. Backend server is running\n2. Check browser console (F12) for details`);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -100,7 +115,7 @@ const VoiceAgentModal: React.FC<VoiceAgentModalProps> = ({ isOpen, onClose }) =>
     try {
       setIsLoading(true);
       const response = await fetch(`${API_BASE_URL}/voice/session/${sessionIdToRestore}/history`);
-      
+
       if (!response.ok) {
         localStorage.removeItem('voiceAgentSessionId');
         startSession();
@@ -115,7 +130,7 @@ const VoiceAgentModal: React.FC<VoiceAgentModalProps> = ({ isOpen, onClose }) =>
           content: msg.content,
           timestamp: new Date(msg.timestamp),
         })));
-        
+
         const stateResponse = await fetch(`${API_BASE_URL}/voice/session/${sessionIdToRestore}/state`);
         if (stateResponse.ok) {
           const stateData = await stateResponse.json();
@@ -160,7 +175,7 @@ const VoiceAgentModal: React.FC<VoiceAgentModalProps> = ({ isOpen, onClose }) =>
       }
 
       const data = await response.json();
-      
+
       const assistantMessage: Message = {
         role: 'assistant',
         content: data.response,
@@ -193,19 +208,91 @@ const VoiceAgentModal: React.FC<VoiceAgentModalProps> = ({ isOpen, onClose }) =>
     }
   };
 
+  // Convert WebM audio to WAV format for better Whisper API compatibility
+  const convertWebMToWAV = async (webmBlob: Blob): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const fileReader = new FileReader();
+
+      fileReader.onload = async (e) => {
+        try {
+          const arrayBuffer = e.target?.result as ArrayBuffer;
+          const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+          // Convert AudioBuffer to WAV
+          const wavBuffer = audioBufferToWav(audioBuffer);
+          const wavBlob = new Blob([wavBuffer], { type: 'audio/wav' });
+          resolve(wavBlob);
+        } catch (error) {
+          reject(error);
+        }
+      };
+
+      fileReader.onerror = reject;
+      fileReader.readAsArrayBuffer(webmBlob);
+    });
+  };
+
+  // Convert AudioBuffer to WAV format
+  const audioBufferToWav = (buffer: AudioBuffer): ArrayBuffer => {
+    const length = buffer.length;
+    const numberOfChannels = buffer.numberOfChannels;
+    const sampleRate = buffer.sampleRate;
+    const bytesPerSample = 2;
+    const blockAlign = numberOfChannels * bytesPerSample;
+    const byteRate = sampleRate * blockAlign;
+    const dataSize = length * blockAlign;
+    const bufferSize = 44 + dataSize;
+    const arrayBuffer = new ArrayBuffer(bufferSize);
+    const view = new DataView(arrayBuffer);
+
+    // WAV header
+    const writeString = (offset: number, string: string) => {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+      }
+    };
+
+    writeString(0, 'RIFF');
+    view.setUint32(4, bufferSize - 8, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true); // fmt chunk size
+    view.setUint16(20, 1, true); // audio format (PCM)
+    view.setUint16(22, numberOfChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, byteRate, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, 16, true); // bits per sample
+    writeString(36, 'data');
+    view.setUint32(40, dataSize, true);
+
+    // Convert float samples to 16-bit PCM
+    let offset = 44;
+    for (let i = 0; i < length; i++) {
+      for (let channel = 0; channel < numberOfChannels; channel++) {
+        const sample = Math.max(-1, Math.min(1, buffer.getChannelData(channel)[i]));
+        view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+        offset += 2;
+      }
+    }
+
+    return arrayBuffer;
+  };
+
   // Voice recording functions
   const startRecording = async () => {
     try {
       // Request high-quality audio for better transcription
-      const stream = await navigator.mediaDevices.getUserMedia({ 
+      const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
           sampleRate: 44100, // Higher sample rate for better quality
-        } 
+        }
       });
-      
+
       // Try to use the best available codec
       let mimeType = 'audio/webm';
       const codecs = [
@@ -214,14 +301,14 @@ const VoiceAgentModal: React.FC<VoiceAgentModalProps> = ({ isOpen, onClose }) =>
         'audio/mp4',
         'audio/ogg;codecs=opus',
       ];
-      
+
       for (const codec of codecs) {
         if (MediaRecorder.isTypeSupported(codec)) {
           mimeType = codec;
           break;
         }
       }
-      
+
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: mimeType,
         audioBitsPerSecond: 128000, // Higher bitrate for better quality
@@ -238,8 +325,34 @@ const VoiceAgentModal: React.FC<VoiceAgentModalProps> = ({ isOpen, onClose }) =>
 
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach((track) => track.stop());
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        await sendVoiceMessage(audioBlob);
+
+        try {
+          // ✅ Frontend guard (mandatory): Check audio size before processing
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+
+          if (audioBlob.size < 10_000) {
+            throw new Error('Recording too short. Please record for at least 1-2 seconds.');
+          }
+
+          // ✅ Normalize audio format: Convert WebM → WAV PCM16 before STT
+          const wavBlob = await convertWebMToWAV(audioBlob);
+
+          // Validate converted WAV size
+          if (wavBlob.size < 10_000) {
+            throw new Error('Converted audio is too short. Please try recording again.');
+          }
+
+          await sendVoiceMessage(wavBlob);
+        } catch (conversionError) {
+          console.error('Audio processing failed:', conversionError);
+          const errorMessage: Message = {
+            role: 'assistant',
+            content: `Sorry, I couldn't process your audio: ${conversionError instanceof Error ? conversionError.message : 'Unknown error'}. Please try recording again (at least 1-2 seconds).`,
+            timestamp: new Date(),
+          };
+          setMessages((prev) => [...prev, errorMessage]);
+          setIsLoading(false);
+        }
       };
 
       mediaRecorder.start();
@@ -380,7 +493,7 @@ const VoiceAgentModal: React.FC<VoiceAgentModalProps> = ({ isOpen, onClose }) =>
     if (state === 'booking_confirmed' || state === 'completed') {
       return; // Prevent accidental closing after booking confirmation
     }
-    
+
     if (sessionId && messages.length > 1) {
       if (window.confirm('You have an active conversation. Are you sure you want to close? Your conversation will be saved.')) {
         onClose();
@@ -543,14 +656,14 @@ const VoiceAgentModal: React.FC<VoiceAgentModalProps> = ({ isOpen, onClose }) =>
         </div>
 
         <div className="voice-agent-modal-footer">
-          <button 
+          <button
             onClick={() => {
               if (window.confirm('Are you sure you want to restart? This will start a new conversation.')) {
                 localStorage.removeItem('voiceAgentSessionId');
                 setMessages([]);
                 startSession();
               }
-            }} 
+            }}
             className="restart-button"
           >
             🔄 Start New Conversation

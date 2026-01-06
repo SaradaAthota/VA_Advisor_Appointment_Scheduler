@@ -44,7 +44,7 @@ Write-Host "  - Docs: Enabled (mock)" -ForegroundColor White
 Write-Host "  - Gmail: Enabled (mock)" -ForegroundColor White
 Write-Host ""
 Write-Host "You can now test the MCP services!" -ForegroundColor Green
-Write-Host "Run: npx ts-node test-mcp-services.ts" -ForegroundColor Cyan
+Write-Host "MCP services are configured. You can test them through the application." -ForegroundColor Cyan
 Write-Host ""
-Write-Host "For real Google API setup, see: GOOGLE_API_SETUP_GUIDE.md" -ForegroundColor Yellow
+Write-Host "For real Google API setup, configure GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI, and GOOGLE_REFRESH_TOKEN in .env" -ForegroundColor Yellow
 

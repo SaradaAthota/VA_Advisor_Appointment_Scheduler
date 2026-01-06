@@ -6,6 +6,7 @@ import {
   Param,
   HttpCode,
   HttpStatus,
+  HttpException,
   UseInterceptors,
   UploadedFile,
   Res,
@@ -44,11 +45,25 @@ export class VoiceController {
   @Post('session/start')
   @HttpCode(HttpStatus.OK)
   async startSession(): Promise<StartSessionResponseDto> {
-    const result = await this.conversationService.startSession();
-    return {
-      sessionId: result.sessionId,
-      greeting: result.greeting,
-    };
+    try {
+      this.logger.log('[START SESSION] Starting new conversation session');
+      const result = await this.conversationService.startSession();
+      this.logger.log(`[START SESSION] Session created: ${result.sessionId}`);
+      return {
+        sessionId: result.sessionId,
+        greeting: result.greeting,
+      };
+    } catch (error: any) {
+      this.logger.error(`[START SESSION] Error: ${error.message}`, error.stack);
+      throw new HttpException(
+        {
+          message: 'Failed to start conversation session',
+          error: error.message,
+          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
 
   /**
@@ -190,19 +205,66 @@ export class VoiceController {
       this.logger.log(`[VOICE MESSAGE] Starting transcription for session: ${sessionId}`);
       this.logger.log(`[VOICE MESSAGE] Audio file: ${file.originalname || 'audio.webm'}, size: ${(file.size / 1024).toFixed(2)} KB, mimeType: ${file.mimetype}`);
 
+      // ✅ Backend validation: Reject early with clear reason
+      if (!file.buffer || file.buffer.length === 0) {
+        this.logger.error(`[VOICE MESSAGE] Empty audio buffer received`);
+        res.status(HttpStatus.BAD_REQUEST).json({
+          error: 'Audio too short or invalid format',
+          message: 'No audio data received. Please try recording again (at least 1-2 seconds).',
+          statusCode: HttpStatus.BAD_REQUEST,
+        });
+        return;
+      }
+
+      // Validate minimum audio size (10KB)
+      const MIN_AUDIO_SIZE = 10_000;
+      if (file.buffer.length < MIN_AUDIO_SIZE) {
+        this.logger.error(`[VOICE MESSAGE] Audio too small: ${file.buffer.length} bytes (minimum: ${MIN_AUDIO_SIZE} bytes)`);
+        res.status(HttpStatus.BAD_REQUEST).json({
+          error: 'Audio too short or invalid format',
+          message: `Recording is too short (${(file.buffer.length / 1024).toFixed(2)} KB). Please record for at least 1-2 seconds.`,
+          statusCode: HttpStatus.BAD_REQUEST,
+        });
+        return;
+      }
+
+      // Determine filename with proper extension based on MIME type
+      let filename = file.originalname || 'audio.webm';
+      if (file.mimetype) {
+        const mimeToExt: { [key: string]: string } = {
+          'audio/webm': 'webm',
+          'audio/wav': 'wav',
+          'audio/x-wav': 'wav', // Alternative WAV MIME type
+          'audio/wave': 'wav', // Another WAV MIME type
+          'audio/mpeg': 'mp3',
+          'audio/mp4': 'm4a',
+          'audio/ogg': 'ogg',
+        };
+        const ext = mimeToExt[file.mimetype];
+        if (ext && !filename.endsWith(`.${ext}`)) {
+          filename = `audio.${ext}`;
+          this.logger.debug(`[VOICE MESSAGE] Updated filename to ${filename} based on MIME type ${file.mimetype}`);
+        }
+      }
+
       let userText: string;
       try {
         userText = await this.sttService.transcribeAudio(
           file.buffer,
-          file.originalname || 'audio.webm',
+          filename,
         );
         this.logger.log(`[VOICE MESSAGE] STT transcribed: "${userText}" (length: ${userText.length})`);
       } catch (sttError: any) {
         this.logger.error(`[VOICE MESSAGE] STT failed: ${sttError.message}`);
-        // Return error response
+        this.logger.error(`[VOICE MESSAGE] Audio details: size=${file.size}, mimeType=${file.mimetype}, filename=${filename}`);
+
+        // ✅ Backend validation: Return clear error message
+        const errorMessage = sttError.message || 'Failed to transcribe audio. Please try again or use text mode.';
+        const isFormatError = errorMessage.includes('Audio too short') || errorMessage.includes('invalid format');
+
         res.status(HttpStatus.BAD_REQUEST).json({
-          message: sttError.message || 'Failed to transcribe audio. Please try again or use text mode.',
-          error: 'STT Transcription Failed',
+          error: isFormatError ? 'Audio too short or invalid format' : 'STT Transcription Failed',
+          message: errorMessage,
           statusCode: HttpStatus.BAD_REQUEST,
         });
         return;

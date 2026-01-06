@@ -107,10 +107,12 @@ export class ConversationService {
 
     this.logger.debug(`Processing message in state: ${session.state}, input: "${userInput.substring(0, 50)}..."`);
 
-    // Recognize intent
-    const { intent, confidence } = await this.intentRecognition.recognizeIntent(userInput);
+    // Recognize intent with context
+    const { intent, confidence } = await this.intentRecognition.recognizeIntent(userInput, {
+      state: session.state,
+    });
     await this.conversationLog.logIntent(sessionId, intent, confidence, userInput);
-    
+
     this.logger.debug(`Recognized intent: ${intent} (confidence: ${confidence})`);
 
     // Update session
@@ -119,7 +121,7 @@ export class ConversationService {
 
     // Process based on current state and intent
     const result = await this.processConversation(session, userInput, intent);
-    
+
     this.logger.debug(`State transition: ${session.state} -> ${result.state}`);
 
     // Log assistant response with metadata
@@ -169,7 +171,7 @@ export class ConversationService {
     if (!session) {
       return { error: 'Session not found' };
     }
-    
+
     return {
       sessionId: session.sessionId,
       state: session.state,
@@ -266,7 +268,7 @@ export class ConversationService {
   ): Promise<{ response: string; state: ConversationState }> {
     // Check if input is garbage/invalid (like "ԾԾԾԾԾԾԾԾԾԾԾԾԾ")
     const isValidInput = /[\w\s.,!?;:'"()-]/.test(userInput) && userInput.length > 2;
-    
+
     if (!isValidInput) {
       this.logger.warn(`[GREETING] Invalid input detected: "${userInput}" - likely STT transcription error`);
       const response = "I'm having trouble understanding your voice input. The transcription might not be accurate. Please try:\n\n1. Speaking more clearly and slowly\n2. Using text mode instead\n3. Checking your microphone settings";
@@ -277,12 +279,12 @@ export class ConversationService {
     // Check for booking keywords even if intent is unknown
     const lowerInput = userInput.toLowerCase();
     const hasBookingKeywords = /\b(book|appointment|schedule|meeting|slot)\b/.test(lowerInput);
-    
+
     if (intent === Intent.BOOK_NEW || intent === Intent.GREETING || hasBookingKeywords) {
       const oldState = session.state;
       session.state = ConversationState.DISCLAIMER;
       await this.conversationLog.logStateChange(session.sessionId, oldState, session.state, 'User wants to book');
-      
+
       const disclaimer = this.getDisclaimer();
       await this.addMessage(session, 'assistant', disclaimer);
       return { response: disclaimer, state: session.state };
@@ -295,7 +297,7 @@ export class ConversationService {
         const oldState = session.state;
         session.state = ConversationState.DISCLAIMER;
         await this.conversationLog.logStateChange(session.sessionId, oldState, session.state, 'User wants to book (detected from keywords)');
-        
+
         const disclaimer = this.getDisclaimer();
         await this.addMessage(session, 'assistant', disclaimer);
         return { response: disclaimer, state: session.state };
@@ -348,22 +350,22 @@ export class ConversationService {
     // Log the exact input we're trying to extract from
     this.logger.log(`[TOPIC COLLECTION] Attempting to extract topic from: "${userInput}" (state: ${session.state})`);
     this.logger.log(`[TOPIC COLLECTION] Session topic currently: ${session.topic || 'not set'}`);
-    
+
     // Try keyword-based extraction first
     let topic = this.extractTopic(userInput);
     this.logger.log(`[TOPIC EXTRACTION] Keyword extraction result: ${topic || 'null'} from "${userInput}"`);
-    
+
     // If keyword extraction fails, try using OpenAI to extract topic
     if (!topic && this.openai) {
       this.logger.log('[TOPIC EXTRACTION] Keyword extraction failed, trying OpenAI-based topic extraction');
       topic = await this.extractTopicWithLLM(userInput);
       this.logger.log(`[TOPIC EXTRACTION] OpenAI result: ${topic || 'null'}`);
     }
-    
+
     // Final fallback: if still no topic, check if input is too short or unclear (likely transcription error)
     if (!topic) {
       this.logger.warn(`[TOPIC EXTRACTION] Both keyword and LLM extraction failed for: "${userInput}"`);
-      
+
       // If input is very short (like "you", "yes", "ok"), it might be a transcription error
       // In this case, we should ask the user to repeat or try text mode
       if (userInput.length <= 5 && userInput.toLowerCase().match(/^(you|yes|ok|yeah|yep|sure|uh|um)$/)) {
@@ -372,15 +374,15 @@ export class ConversationService {
         // Instead, we'll handle this in the error message below
       }
     }
-    
+
     if (!topic) {
       // Count how many times we've asked
       const assistantMessages = session.messages
         .filter(msg => msg.role === 'assistant')
         .slice(-10); // Check last 10 messages
-      
-      const askCount = assistantMessages.filter(msg => 
-        msg.content.includes("I didn't catch that") || 
+
+      const askCount = assistantMessages.filter(msg =>
+        msg.content.includes("I didn't catch that") ||
         msg.content.includes("Please choose one of the topics") ||
         msg.content.includes("I'm having trouble understanding")
       ).length;
@@ -391,10 +393,10 @@ export class ConversationService {
       if (askCount >= 2) {
         const lowerInput = userInput.toLowerCase().trim();
         this.logger.log(`[TOPIC COLLECTION] Attempting aggressive fallback for: "${userInput}"`);
-        
+
         // Very aggressive matching - if it sounds even remotely like a topic, accept it
-        if (lowerInput.includes('kyc') || lowerInput.includes('key') || lowerInput.includes('see') || 
-            lowerInput.includes('onboard') || lowerInput.includes('on board') || lowerInput.includes('kay')) {
+        if (lowerInput.includes('kyc') || lowerInput.includes('key') || lowerInput.includes('see') ||
+          lowerInput.includes('onboard') || lowerInput.includes('on board') || lowerInput.includes('kay')) {
           this.logger.log(`[TOPIC COLLECTION] Aggressive fallback: Accepting KYC_ONBOARDING based on: "${userInput}"`);
           topic = Topic.KYC_ONBOARDING;
         } else if (lowerInput.includes('sip') || lowerInput.includes('mandate')) {
@@ -553,7 +555,7 @@ export class ConversationService {
           specificDate: parsedDate,
         };
         session.timePreference = timePreference;
-        
+
         const slots = await this.slotService.offerTwoSlots(timePreference);
         session.offeredSlots = slots;
 
@@ -596,14 +598,56 @@ export class ConversationService {
   ): Promise<{ response: string; state: ConversationState; bookingCode?: string }> {
     const confirmed = this.isConfirmation(userInput);
     const cancelled = this.isCancellation(userInput);
-    
+
+    // Handle menu option selection (when user says "1", "2", "3" after being shown options)
+    const lowerInput = userInput.toLowerCase().trim();
+    const assistantMessages = session.messages
+      .filter(msg => msg.role === 'assistant')
+      .slice(-2);
+    const wasShownOptions = assistantMessages.some(msg =>
+      msg.content.includes('Choose a different slot') ||
+      msg.content.includes('Change the time preference') ||
+      msg.content.includes('Start over')
+    );
+
+    if (wasShownOptions) {
+      // User is selecting a menu option
+      if (/^(1|one|first|different slot|choose slot)$/i.test(lowerInput)) {
+        // Option 1: Choose a different slot
+        if (session.offeredSlots && session.offeredSlots.length > 0) {
+          session.state = ConversationState.OFFERING_SLOTS;
+          session.selectedSlot = undefined;
+          const response = `Here are the available slots again:\n${this.formatSlotOffer(session.offeredSlots, session.timeZone)}\n\nPlease choose one by saying the slot number or the date and time.`;
+          await this.addMessage(session, 'assistant', response);
+          return { response, state: session.state };
+        }
+      } else if (/^(2|two|second|change time|time preference)$/i.test(lowerInput)) {
+        // Option 2: Change time preference
+        session.state = ConversationState.COLLECTING_TIME_PREFERENCE;
+        session.selectedSlot = undefined;
+        const response = "When would you prefer your appointment? Please mention a day (like Monday, Tuesday) and time of day (morning, afternoon, or evening), or a specific date.";
+        await this.addMessage(session, 'assistant', response);
+        return { response, state: session.state };
+      } else if (/^(3|three|third|start over|new booking)$/i.test(lowerInput)) {
+        // Option 3: Start over
+        session.state = ConversationState.COLLECTING_TOPIC;
+        session.selectedSlot = undefined;
+        session.topic = undefined;
+        session.timePreference = undefined;
+        session.offeredSlots = [];
+        const response = "Sure! Let's start over. What topic would you like to discuss in your appointment?";
+        await this.addMessage(session, 'assistant', response);
+        return { response, state: session.state };
+      }
+    }
+
     // Handle cancellation
     if (cancelled) {
       const oldState = session.state;
       session.state = ConversationState.OFFERING_SLOTS;
       session.selectedSlot = undefined;
       await this.conversationLog.logStateChange(session.sessionId, oldState, session.state, 'User cancelled booking confirmation');
-      
+
       if (session.offeredSlots && session.offeredSlots.length > 0) {
         const response = "No problem! Would you like to choose a different slot, or would you prefer a different time?";
         await this.addMessage(session, 'assistant', response);
@@ -615,20 +659,15 @@ export class ConversationService {
         return { response, state: session.state };
       }
     }
-    
+
     // If not confirmed and not cancelled, ask again (but only once)
     if (!confirmed) {
       // Check if we've already asked this question (to avoid infinite loop)
-      // Look at the last few assistant messages to see if we already asked
-      const assistantMessages = session.messages
-        .filter(msg => msg.role === 'assistant')
-        .slice(-2); // Get last 2 assistant messages
-      
-      const alreadyAsked = assistantMessages.some(msg => 
-        msg.content.includes('Would you like to proceed') || 
+      const alreadyAsked = assistantMessages.some(msg =>
+        msg.content.includes('Would you like to proceed') ||
         msg.content.includes("I understand you're not ready")
       );
-      
+
       if (alreadyAsked) {
         // Already asked, provide more options
         const response = "I understand you're not ready to confirm. Would you like to:\n1. Choose a different slot\n2. Change the time preference\n3. Start over with a new booking\n\nPlease let me know what you'd prefer.";
@@ -709,7 +748,7 @@ export class ConversationService {
   ): Promise<{ response: string; state: ConversationState }> {
     const timePreference = this.extractTimePreference(userInput);
     const slots = await this.slotService.offerMultipleSlots(5, timePreference || undefined);
-    
+
     if (slots.length === 0) {
       const response = "I'm sorry, but there are no available slots at the moment. Would you like to be added to a waitlist?";
       await this.addMessage(session, 'assistant', response);
@@ -830,64 +869,64 @@ For more information, visit: https://groww.in/help`;
 
     const originalInput = input;
     const lower = input.toLowerCase().trim();
-    
+
     this.logger.debug(`[TOPIC EXTRACTION] Original input: "${originalInput}"`);
     this.logger.debug(`[TOPIC EXTRACTION] Lowercased: "${lower}"`);
-    
+
     // Remove common filler words and punctuation
     const cleaned = lower.replace(/[.,!?;:]/g, ' ').replace(/\s+/g, ' ').trim();
     this.logger.debug(`[TOPIC EXTRACTION] Cleaned: "${cleaned}"`);
-    
+
     // More flexible matching for KYC/Onboarding
     // Check for exact matches first, then partial matches
     const kycPatterns = [
       'kyc', 'onboarding', 'on board', 'on-board', 'keyc', 'k y c',
       'kay see', 'kay c', 'k y c', 'key see', 'on board', 'onboard'
     ];
-    
+
     for (const pattern of kycPatterns) {
       if (cleaned === pattern || cleaned.includes(pattern)) {
         this.logger.log(`[TOPIC EXTRACTION] Matched KYC pattern: "${pattern}" in "${cleaned}"`);
         return Topic.KYC_ONBOARDING;
       }
     }
-    
+
     // SIP/Mandates
-    if (cleaned === 'sip' || 
-        cleaned === 'mandate' ||
-        cleaned === 'mandates' ||
-        cleaned.includes('sip') || 
-        cleaned.includes('mandate')) {
+    if (cleaned === 'sip' ||
+      cleaned === 'mandate' ||
+      cleaned === 'mandates' ||
+      cleaned.includes('sip') ||
+      cleaned.includes('mandate')) {
       this.logger.log(`[TOPIC EXTRACTION] Matched SIP pattern in "${cleaned}"`);
       return Topic.SIP_MANDATES;
     }
-    
+
     // Statements/Tax Docs
-    if (cleaned.includes('statement') || 
-        cleaned.includes('tax') || 
-        cleaned.includes('doc') ||
-        cleaned.includes('document')) {
+    if (cleaned.includes('statement') ||
+      cleaned.includes('tax') ||
+      cleaned.includes('doc') ||
+      cleaned.includes('document')) {
       this.logger.log(`[TOPIC EXTRACTION] Matched Statements pattern in "${cleaned}"`);
       return Topic.STATEMENTS_TAX_DOCS;
     }
-    
+
     // Withdrawals & Timelines
-    if (cleaned.includes('withdrawal') || 
-        cleaned.includes('timeline') ||
-        cleaned.includes('withdraw')) {
+    if (cleaned.includes('withdrawal') ||
+      cleaned.includes('timeline') ||
+      cleaned.includes('withdraw')) {
       this.logger.log(`[TOPIC EXTRACTION] Matched Withdrawals pattern in "${cleaned}"`);
       return Topic.WITHDRAWALS_TIMELINES;
     }
-    
+
     // Account Changes/Nominee
-    if (cleaned.includes('account') || 
-        cleaned.includes('change') || 
-        cleaned.includes('nominee') ||
-        cleaned.includes('update')) {
+    if (cleaned.includes('account') ||
+      cleaned.includes('change') ||
+      cleaned.includes('nominee') ||
+      cleaned.includes('update')) {
       this.logger.log(`[TOPIC EXTRACTION] Matched Account Changes pattern in "${cleaned}"`);
       return Topic.ACCOUNT_CHANGES_NOMINEE;
     }
-    
+
     // Check for number selection (1-5) - handle both words and digits
     // Handle various number formats: "one", "1", "first", "number one", etc.
     const numberPatterns = {
@@ -913,7 +952,7 @@ For more information, visit: https://groww.in/help`;
         }
       }
     }
-    
+
     this.logger.warn(`[TOPIC EXTRACTION] No match found for: "${originalInput}" (cleaned: "${cleaned}")`);
     return null;
   }
@@ -929,7 +968,7 @@ For more information, visit: https://groww.in/help`;
 
     try {
       this.logger.debug(`[TOPIC EXTRACTION] Attempting LLM extraction for: "${input}"`);
-      
+
       const response = await this.openai.chat.completions.create({
         model: this.configService.get<string>('OPENAI_MODEL', 'gpt-4o-mini'),
         messages: [
@@ -960,7 +999,7 @@ Respond with ONLY the topic name (e.g., "KYC_ONBOARDING") or "null" if unclear.`
 
       const topicStr = response.choices[0]?.message?.content?.trim().toUpperCase();
       this.logger.debug(`[TOPIC EXTRACTION] LLM response: "${topicStr}"`);
-      
+
       if (!topicStr || topicStr === 'NULL' || topicStr.includes('NULL')) {
         this.logger.warn(`[TOPIC EXTRACTION] LLM returned null for: "${input}"`);
         return null;
@@ -981,7 +1020,7 @@ Respond with ONLY the topic name (e.g., "KYC_ONBOARDING") or "null" if unclear.`
       } else {
         this.logger.warn(`[TOPIC EXTRACTION] LLM returned unknown topic: "${topicStr}" for input: "${input}"`);
       }
-      
+
       return topic;
     } catch (error) {
       this.logger.error(`[TOPIC EXTRACTION] LLM extraction failed: ${error.message}`, error.stack);
@@ -1025,30 +1064,83 @@ Respond with ONLY the topic name (e.g., "KYC_ONBOARDING") or "null" if unclear.`
   }
 
   private extractSlotSelection(input: string, slots: Slot[]): Slot | null {
-    const lower = input.toLowerCase();
-    
-    // Check for slot number
-    if (lower.includes('first') || lower.includes('1') || lower.includes('one')) {
+    const lower = input.toLowerCase().trim();
+
+    // Check for explicit slot number patterns
+    // "slot no. 1", "slot number 1", "slot 1", "first slot", "1st slot", "one"
+    const slot1Pattern = /(slot\s*(no|number|#)?\s*[1]|first|1st|^one$|^1$)/i;
+    if (slot1Pattern.test(lower)) {
       return slots[0] || null;
     }
-    if (lower.includes('second') || lower.includes('2') || lower.includes('two')) {
+
+    const slot2Pattern = /(slot\s*(no|number|#)?\s*[2]|second|2nd|^two$|^2$)/i;
+    if (slot2Pattern.test(lower)) {
       return slots[1] || null;
+    }
+
+    // Try to extract time from input (e.g., "10am", "10:00", "9:30 am", "10 a.m.")
+    const timePattern = /(\d{1,2})\s*(:(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?/i;
+    const timeMatch = input.match(timePattern);
+    let extractedHour: number | null = null;
+    let extractedMinute: number | null = null;
+
+    if (timeMatch) {
+      extractedHour = parseInt(timeMatch[1]);
+      extractedMinute = timeMatch[3] ? parseInt(timeMatch[3]) : 0;
+      const ampm = (timeMatch[4] || '').toLowerCase();
+
+      // Convert to 24-hour format
+      if (ampm.includes('pm') && extractedHour !== 12) {
+        extractedHour += 12;
+      } else if (ampm.includes('am') && extractedHour === 12) {
+        extractedHour = 0;
+      }
+
+      // Match slot by time (within 30 minutes tolerance)
+      for (const slot of slots) {
+        const slotStart = new Date(slot.startTime);
+        const slotHour = slotStart.getHours();
+        const slotMinute = slotStart.getMinutes();
+
+        // Check if time matches (exact match or within 30 minutes)
+        if (slotHour === extractedHour && Math.abs(slotMinute - extractedMinute) <= 30) {
+          return slot;
+        }
+      }
     }
 
     // Try to parse date from input (handles formats like "7 January 2026", "January 7, 2026", etc.)
     const parsedDate = this.parseDateFromInput(input);
-    
+
     if (parsedDate) {
-      // Match against offered slots by date
-      for (const slot of slots) {
-        const slotDate = new Date(slot.startTime);
-        // Compare dates (ignore time)
-        if (
-          slotDate.getFullYear() === parsedDate.getFullYear() &&
-          slotDate.getMonth() === parsedDate.getMonth() &&
-          slotDate.getDate() === parsedDate.getDate()
-        ) {
-          return slot;
+      // If time was also mentioned, match by both date and time
+      if (timeMatch && extractedHour !== null && extractedMinute !== null) {
+        for (const slot of slots) {
+          const slotDate = new Date(slot.startTime);
+          const slotHour = slotDate.getHours();
+          const slotMinute = slotDate.getMinutes();
+
+          if (
+            slotDate.getFullYear() === parsedDate.getFullYear() &&
+            slotDate.getMonth() === parsedDate.getMonth() &&
+            slotDate.getDate() === parsedDate.getDate() &&
+            slotHour === extractedHour && Math.abs(slotMinute - extractedMinute) <= 30
+          ) {
+            return slot;
+          }
+        }
+      } else {
+        // Match against offered slots by date only
+        for (const slot of slots) {
+          const slotDate = new Date(slot.startTime);
+          // Compare dates (ignore time)
+          if (
+            slotDate.getFullYear() === parsedDate.getFullYear() &&
+            slotDate.getMonth() === parsedDate.getMonth() &&
+            slotDate.getDate() === parsedDate.getDate()
+          ) {
+            return slot;
+          }
         }
       }
     }
@@ -1074,7 +1166,7 @@ Respond with ONLY the topic name (e.g., "KYC_ONBOARDING") or "null" if unclear.`
    */
   private parseDateFromInput(input: string): Date | null {
     const lower = input.toLowerCase();
-    
+
     // Month names
     const months: { [key: string]: number } = {
       january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
@@ -1114,7 +1206,7 @@ Respond with ONLY the topic name (e.g., "KYC_ONBOARDING") or "null" if unclear.`
       const part1 = parseInt(match3[1]);
       const part2 = parseInt(match3[2]);
       const year = parseInt(match3[3]);
-      
+
       // Try DD/MM/YYYY first (more common in international format)
       if (part1 <= 31 && part2 <= 12) {
         return new Date(year, part2 - 1, part1);
@@ -1125,7 +1217,8 @@ Respond with ONLY the topic name (e.g., "KYC_ONBOARDING") or "null" if unclear.`
       }
     }
 
-    // Pattern 4: "on 7th January" (without year - assume current or next year)
+    // Pattern 4: "on 7th January" or "Monday, 12th January" (without year - assume current or next year)
+    // This pattern allows for optional text before (like day names) and after (like time)
     const pattern4 = /(\d+)(?:st|nd|rd|th)?\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i;
     const match4 = input.match(pattern4);
     if (match4) {
@@ -1148,7 +1241,10 @@ Respond with ONLY the topic name (e.g., "KYC_ONBOARDING") or "null" if unclear.`
 
   private isConfirmation(input: string): boolean {
     const lower = input.toLowerCase().trim();
-    return /^(yes|y|confirm|ok|okay|sure|proceed|book it)$/i.test(lower);
+    // Match "yes", "y", "confirm", "ok", "okay", "sure", "proceed", "book it", "go ahead", etc.
+    // Also handle variations like "yes please", "yes I do", "yes confirm"
+    return /^(yes|y|confirm|ok|okay|sure|proceed|book it|go ahead|do it|let's do it|let's go)(\s+(please|i do|confirm|proceed))?$/i.test(lower) ||
+      /^(yes|y|confirm|ok|okay|sure|proceed|book it|go ahead|do it|let's do it|let's go)$/i.test(lower.split(/\s+/)[0]);
   }
 
   private isCancellation(input: string): boolean {
