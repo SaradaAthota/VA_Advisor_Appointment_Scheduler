@@ -596,11 +596,36 @@ export class ConversationService {
     userInput: string,
     intent: Intent,
   ): Promise<{ response: string; state: ConversationState; bookingCode?: string }> {
+    const lowerInput = userInput.toLowerCase().trim();
     const confirmed = this.isConfirmation(userInput);
     const cancelled = this.isCancellation(userInput);
+    
+    this.logger.log(`[CONFIRMATION] Input: "${userInput}" (lower: "${lowerInput}"), confirmed: ${confirmed}, cancelled: ${cancelled}`);
 
-    // Handle menu option selection (when user says "1", "2", "3" after being shown options)
-    const lowerInput = userInput.toLowerCase().trim();
+    // Check confirmation FIRST - if user confirms, proceed immediately
+    if (confirmed) {
+      this.logger.log(`[CONFIRMATION] User confirmed booking: "${userInput}"`);
+      // Proceed to booking creation below (skip all other checks)
+    } else if (cancelled) {
+      // Handle cancellation
+      const oldState = session.state;
+      session.state = ConversationState.OFFERING_SLOTS;
+      session.selectedSlot = undefined;
+      await this.conversationLog.logStateChange(session.sessionId, oldState, session.state, 'User cancelled booking confirmation');
+
+      if (session.offeredSlots && session.offeredSlots.length > 0) {
+        const response = "No problem! Would you like to choose a different slot, or would you prefer a different time?";
+        await this.addMessage(session, 'assistant', response);
+        return { response, state: session.state };
+      } else {
+        const response = "No problem! When would you prefer your appointment? Please mention a day and time of day.";
+        session.state = ConversationState.COLLECTING_TIME_PREFERENCE;
+        await this.addMessage(session, 'assistant', response);
+        return { response, state: session.state };
+      }
+    }
+
+    // Handle menu option selection (only if NOT confirmed and NOT cancelled)
     const assistantMessages = session.messages
       .filter(msg => msg.role === 'assistant')
       .slice(-2);
@@ -610,7 +635,7 @@ export class ConversationService {
       msg.content.includes('Start over')
     );
 
-    if (wasShownOptions) {
+    if (wasShownOptions && !confirmed && !cancelled) {
       // User is selecting a menu option
       if (/^(1|one|first|different slot|choose slot)$/i.test(lowerInput)) {
         // Option 1: Choose a different slot
@@ -641,27 +666,8 @@ export class ConversationService {
       }
     }
 
-    // Handle cancellation
-    if (cancelled) {
-      const oldState = session.state;
-      session.state = ConversationState.OFFERING_SLOTS;
-      session.selectedSlot = undefined;
-      await this.conversationLog.logStateChange(session.sessionId, oldState, session.state, 'User cancelled booking confirmation');
-
-      if (session.offeredSlots && session.offeredSlots.length > 0) {
-        const response = "No problem! Would you like to choose a different slot, or would you prefer a different time?";
-        await this.addMessage(session, 'assistant', response);
-        return { response, state: session.state };
-      } else {
-        const response = "No problem! When would you prefer your appointment? Please mention a day and time of day.";
-        session.state = ConversationState.COLLECTING_TIME_PREFERENCE;
-        await this.addMessage(session, 'assistant', response);
-        return { response, state: session.state };
-      }
-    }
-
     // If not confirmed and not cancelled, ask again (but only once)
-    if (!confirmed) {
+    if (!confirmed && !cancelled) {
       // Check if we've already asked this question (to avoid infinite loop)
       const alreadyAsked = assistantMessages.some(msg =>
         msg.content.includes('Would you like to proceed') ||
@@ -1067,14 +1073,16 @@ Respond with ONLY the topic name (e.g., "KYC_ONBOARDING") or "null" if unclear.`
     const lower = input.toLowerCase().trim();
 
     // Check for explicit slot number patterns
-    // "slot no. 1", "slot number 1", "slot 1", "first slot", "1st slot", "one"
-    const slot1Pattern = /(slot\s*(no|number|#)?\s*[1]|first|1st|^one$|^1$)/i;
-    if (slot1Pattern.test(lower)) {
+    // "slot no. 1", "slot number 1", "slot 1", "first slot", "1st slot", "one", "1"
+    if (lower === 'one' || lower === '1' || 
+        /^(slot\s*(no|number|#)?\s*[1]|first|1st)/i.test(lower) ||
+        lower.includes('first slot') || lower.includes('slot 1') || lower.includes('slot no 1') || lower.includes('slot number 1')) {
       return slots[0] || null;
     }
-
-    const slot2Pattern = /(slot\s*(no|number|#)?\s*[2]|second|2nd|^two$|^2$)/i;
-    if (slot2Pattern.test(lower)) {
+    
+    if (lower === 'two' || lower === '2' ||
+        /^(slot\s*(no|number|#)?\s*[2]|second|2nd)/i.test(lower) ||
+        lower.includes('second slot') || lower.includes('slot 2') || lower.includes('slot no 2') || lower.includes('slot number 2')) {
       return slots[1] || null;
     }
 
@@ -1240,11 +1248,48 @@ Respond with ONLY the topic name (e.g., "KYC_ONBOARDING") or "null" if unclear.`
   }
 
   private isConfirmation(input: string): boolean {
+    if (!input || typeof input !== 'string') {
+      return false;
+    }
+    
     const lower = input.toLowerCase().trim();
-    // Match "yes", "y", "confirm", "ok", "okay", "sure", "proceed", "book it", "go ahead", etc.
-    // Also handle variations like "yes please", "yes I do", "yes confirm"
-    return /^(yes|y|confirm|ok|okay|sure|proceed|book it|go ahead|do it|let's do it|let's go)(\s+(please|i do|confirm|proceed))?$/i.test(lower) ||
-      /^(yes|y|confirm|ok|okay|sure|proceed|book it|go ahead|do it|let's do it|let's go)$/i.test(lower.split(/\s+/)[0]);
+    
+    // Remove punctuation for more robust matching
+    const cleaned = lower.replace(/[.,!?;:]/g, '').trim();
+    
+    // Simple and robust matching for confirmation
+    // Match common confirmation words
+    const confirmationWords = ['yes', 'y', 'confirm', 'ok', 'okay', 'sure', 'proceed', 'go ahead', 'do it', 'lets do it', 'lets go', 'book it', 'i confirm', 'i do'];
+    
+    // Check exact match first
+    if (confirmationWords.includes(cleaned) || confirmationWords.includes(lower)) {
+      return true;
+    }
+    
+    // Check if input starts with any confirmation word
+    for (const word of confirmationWords) {
+      if (cleaned === word || 
+          cleaned.startsWith(word + ' ') || 
+          cleaned.startsWith(word + ',') ||
+          lower.startsWith(word + ' ') ||
+          lower.startsWith(word + ',')) {
+        return true;
+      }
+    }
+    
+    // Also check first word if input has multiple words
+    const firstWord = cleaned.split(/\s+/)[0];
+    if (confirmationWords.includes(firstWord)) {
+      return true;
+    }
+    
+    // Check for "yes" with common variations
+    if (/^yes\s*(please|i do|confirm|proceed|sure|ok|okay)?$/i.test(cleaned) ||
+        /^y\s*(please|i do|confirm|proceed|sure|ok|okay)?$/i.test(cleaned)) {
+      return true;
+    }
+    
+    return false;
   }
 
   private isCancellation(input: string): boolean {
