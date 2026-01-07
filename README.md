@@ -33,15 +33,96 @@ A comprehensive voice agent system for booking advisor appointments with topic a
 
 ## 🛠️ Tech Stack
 
-- **Backend**: Node.js + TypeScript
-- **Backend Framework**: NestJS
-- **Database**: SQLite (TypeORM)
-- **Frontend**: React + TypeScript
-- **Frontend Build Tool**: Vite
-- **Testing**: Jest (Backend), Vitest (Frontend)
-- **MCP Services**: Google Calendar, Google Sheets, Gmail (via googleapis)
-- **Voice Services**: OpenAI Whisper (STT), OpenAI Neural TTS
-- **LLM**: OpenAI GPT-4o-mini (for intent recognition)
+### Backend
+
+- **Runtime**: Node.js 18+
+- **Language**: TypeScript 5.1.3
+- **Framework**: NestJS 10.0.0
+  - `@nestjs/common`: Core NestJS functionality
+  - `@nestjs/core`: Framework core
+  - `@nestjs/platform-express`: Express.js adapter
+  - `@nestjs/config`: Configuration management
+  - `@nestjs/typeorm`: TypeORM integration
+- **Database**: 
+  - SQLite 3 (via `sqlite3` 5.1.7)
+  - TypeORM 0.3.28 (ORM)
+- **Validation**: 
+  - `class-validator` 0.14.0
+  - `class-transformer` 0.5.1
+- **Utilities**:
+  - `uuid` 13.0.0 (UUID generation)
+  - `rxjs` 7.8.1 (Reactive programming)
+  - `reflect-metadata` 0.1.13 (Metadata reflection)
+
+### Frontend
+
+- **Framework**: React 18.2.0
+- **Language**: TypeScript 5.3.3
+- **Build Tool**: Vite 5.0.8
+- **Routing**: React Router DOM 6.20.0
+- **UI**: Custom CSS components
+
+### Voice & AI Services
+
+- **OpenAI SDK**: `openai` 6.15.0
+  - **Speech-to-Text (STT)**: Whisper API (`whisper-1` model)
+  - **Text-to-Speech (TTS)**: Neural TTS (`tts-1` model, `nova` voice)
+  - **LLM**: GPT-4o-mini (for intent recognition and conversation)
+
+### Google APIs (MCP Services)
+
+- **Google APIs Client**: `googleapis` 169.0.0
+  - **Google Calendar API**: Calendar event creation
+  - **Google Sheets API**: Spreadsheet logging
+  - **Gmail API**: Email draft creation
+  - **Google OAuth2**: Authentication
+
+### Testing
+
+**Backend Testing:**
+- `jest` 29.5.0 (Test framework)
+- `ts-jest` 29.1.0 (TypeScript support)
+- `supertest` 6.3.3 (HTTP assertions)
+- `@nestjs/testing` 10.0.0 (NestJS testing utilities)
+
+**Frontend Testing:**
+- `vitest` 1.0.4 (Test framework)
+- `@testing-library/react` 14.1.2 (React testing utilities)
+- `@testing-library/jest-dom` 6.1.5 (DOM matchers)
+- `@testing-library/user-event` 14.5.1 (User interaction simulation)
+- `jsdom` 23.0.1 (DOM environment)
+
+### Development Tools
+
+- **Linting**: 
+  - `eslint` 8.42.0
+  - `@typescript-eslint/eslint-plugin` 6.0.0
+  - `@typescript-eslint/parser` 6.0.0
+- **Formatting**: `prettier` 3.0.0
+- **Type Definitions**:
+  - `@types/node` 20.3.1
+  - `@types/express` 4.17.17
+  - `@types/jest` 29.5.2
+  - `@types/multer` 2.0.0
+  - `@types/react` 18.2.43
+  - `@types/react-dom` 18.2.17
+- **Build Tools**:
+  - `ts-node` 10.9.1 (TypeScript execution)
+  - `ts-loader` 9.4.3 (Webpack TypeScript loader)
+  - `tsconfig-paths` 4.2.0 (Path mapping)
+- **Environment**: `dotenv` 17.2.3 (Environment variables)
+
+### Architecture Patterns
+
+- **Backend**: 
+  - Domain-Driven Design (DDD)
+  - Dependency Injection (NestJS)
+  - Repository Pattern (TypeORM)
+  - Service Layer Architecture
+- **Frontend**: 
+  - Component-Based Architecture
+  - React Hooks
+  - Service Layer for API calls
 
 ## 📁 Project Structure
 
