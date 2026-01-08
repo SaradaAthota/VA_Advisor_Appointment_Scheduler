@@ -15,10 +15,10 @@ import { ConversationLogEntity } from './voice/services/conversation-log.service
     }),
     TypeOrmModule.forRoot({
       type: 'sqlite',
-      database: 'bookings.db',
+      database: process.env.DATABASE_PATH || 'bookings.db',
       entities: [BookingEntity, ConversationLogEntity],
-      synchronize: true, // Auto-create tables (disable in production)
-      logging: false,
+      synchronize: process.env.NODE_ENV !== 'production' || process.env.DATABASE_SYNC === 'true', // Auto-create tables (disable in production)
+      logging: process.env.NODE_ENV === 'development',
     }),
     BookingModule,
     McpModule,

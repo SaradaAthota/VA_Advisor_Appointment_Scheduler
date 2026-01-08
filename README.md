@@ -168,10 +168,10 @@ A comprehensive voice agent system for booking advisor appointments with topic a
 ### Prerequisites
 
 - Node.js 18+ and npm
-- Google Cloud Project with APIs enabled (for MCP services)
-- OpenAI API key (for voice agent)
+- OpenAI API key (for voice agent) - Get from https://platform.openai.com/api-keys
+- Google Cloud Project with APIs enabled (optional, for MCP services)
 
-### Installation
+### Local Development Setup
 
 1. **Clone the repository**
    ```bash
@@ -199,41 +199,378 @@ A comprehensive voice agent system for booking advisor appointments with topic a
    PORT=3000
    FRONTEND_URL=http://localhost:5173
 
-   # Google OAuth
-   GOOGLE_CLIENT_ID=your_client_id
-   GOOGLE_CLIENT_SECRET=your_client_secret
-   GOOGLE_REDIRECT_URI=http://localhost:3000/auth/google/callback
+   # Database (SQLite - created automatically)
+   DATABASE_PATH=bookings.db
 
-   # Google Calendar
-   GOOGLE_CALENDAR_ID=primary
-
-   # Google Sheets
-   GOOGLE_SHEETS_SPREADSHEET_ID=your_spreadsheet_id
-
-   # Gmail
-   ADVISOR_EMAIL=advisor@example.com
-
-   # OpenAI (for Voice Agent)
+   # OpenAI (Required for Voice Agent)
    OPENAI_API_KEY=your_openai_api_key
    OPENAI_MODEL=gpt-4o-mini
    OPENAI_TTS_MODEL=tts-1
    OPENAI_TTS_VOICE=nova
+
+   # Google OAuth (Optional - for MCP services)
+   GOOGLE_CLIENT_ID=your_client_id
+   GOOGLE_CLIENT_SECRET=your_client_secret
+   GOOGLE_REDIRECT_URI=http://localhost:3000/auth/google/callback
+   GOOGLE_REFRESH_TOKEN=your_refresh_token
+
+   # Google Calendar
+   GOOGLE_CALENDAR_ID=primary
+   GOOGLE_CALENDAR_ENABLED=true
+
+   # Google Sheets
+   GOOGLE_SHEETS_PRE_BOOKINGS_SPREADSHEET_ID=your_spreadsheet_id
+   GOOGLE_SHEETS_SHEET_NAME=Sheet1
+   GOOGLE_SHEETS_ENABLED=true
+
+   # Google Docs
+   GOOGLE_DOCS_PRE_BOOKINGS_DOC_ID=your_doc_id
+   GOOGLE_DOCS_ENABLED=true
+
+   # Gmail
+   ADVISOR_EMAIL=advisor@example.com
+   GMAIL_ENABLED=true
    ```
 
-### Running the Application
-
-1. **Start the backend server**
+5. **Run the application**
+   
+   **Backend** (Terminal 1):
    ```bash
    npm run start:dev
    ```
    Backend will be available at `http://localhost:3000`
 
-2. **Start the frontend server** (in a new terminal)
+   **Frontend** (Terminal 2):
    ```bash
    cd frontend
    npm run dev
    ```
    Frontend will be available at `http://localhost:5173`
+
+---
+
+## 🚀 Deployment Guide
+
+### Deployment Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    PRODUCTION SETUP                      │
+├─────────────────────────────────────────────────────────┤
+│                                                           │
+│  ┌──────────────────┐         ┌──────────────────┐     │
+│  │   Railway        │         │   Vercel          │     │
+│  │   (Backend)      │◄────────┤   (Frontend)     │     │
+│  │                  │  API    │                  │     │
+│  │  • Node.js App   │  Calls  │  • React App     │     │
+│  │  • SQLite DB     │         │  • Static Files   │     │
+│  │  (bookings.db)   │         │                  │     │
+│  └──────────────────┘         └──────────────────┘     │
+│                                                           │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Key Points:**
+- ✅ **Backend + Database** → Railway (SQLite database is deployed with backend)
+- ✅ **Frontend** → Vercel (React static files)
+- ✅ **No separate database service needed** - SQLite runs with backend
+
+---
+
+## 📋 Part 1: Backend Deployment (Railway)
+
+### Step 1: Create Railway Account
+
+1. Go to https://railway.app
+2. Click **"Start a New Project"**
+3. Sign up with **GitHub** (recommended)
+4. Authorize Railway to access your GitHub repositories
+
+### Step 2: Create New Project
+
+1. Click **"New Project"**
+2. Select **"Deploy from GitHub repo"**
+3. Choose your repository: `VA_Advisor_Appointment_Scheduler`
+4. Railway will automatically detect it's a Node.js project
+
+### Step 3: Configure Build Settings
+
+1. Click on your service
+2. Go to **Settings** tab
+3. Scroll to **Build & Deploy** section
+4. Configure:
+   - **Root Directory**: `.` (project root)
+   - **Build Command**: `npm install && npm run build`
+   - **Start Command**: `npm run start:prod`
+   - **Watch Paths**: Leave default
+
+### Step 4: Add Environment Variables
+
+1. Go to **Variables** tab
+2. Click **"New Variable"** for each variable
+3. Add the following (update values as needed):
+
+```env
+NODE_ENV=production
+PORT=3000
+FRONTEND_URL=https://your-frontend.vercel.app
+
+# Database (SQLite) - Railway automatically persists this file
+DATABASE_PATH=bookings.db
+
+# OpenAI (Required)
+OPENAI_API_KEY=sk-your-openai-key-here
+OPENAI_MODEL=gpt-4o-mini
+OPENAI_TTS_MODEL=tts-1
+OPENAI_TTS_VOICE=nova
+
+# Google APIs (Optional - can leave empty for mock mode)
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=
+GOOGLE_REFRESH_TOKEN=
+GOOGLE_CALENDAR_ID=primary
+GOOGLE_CALENDAR_ENABLED=true
+GOOGLE_SHEETS_PRE_BOOKINGS_SPREADSHEET_ID=
+GOOGLE_SHEETS_SHEET_NAME=Sheet1
+GOOGLE_SHEETS_ENABLED=true
+GOOGLE_DOCS_PRE_BOOKINGS_DOC_ID=
+GOOGLE_DOCS_ENABLED=true
+ADVISOR_EMAIL=advisor@example.com
+GMAIL_ENABLED=true
+```
+
+**Important Notes:**
+- Replace `your-openai-key-here` with your actual OpenAI API key
+- `FRONTEND_URL` - Update this after deploying frontend (Step 6)
+- `DATABASE_PATH=bookings.db` - Railway automatically persists this file
+- Google API variables can be empty if using mock mode
+
+### Step 5: Deploy Backend
+
+1. Railway will automatically start deploying
+2. Watch **Deploy Logs** tab for progress
+3. Wait for "Build successful" message
+4. Once deployed, Railway provides a URL: `https://your-app-name.up.railway.app`
+5. **Copy this URL** - you'll need it for frontend configuration
+
+### Step 6: Verify Backend & Database
+
+1. Test backend health: `https://your-app-name.up.railway.app/bookings/debug/all`
+   - Should return JSON (empty array if no bookings)
+2. Database is automatically created on first run
+3. Database file (`bookings.db`) persists on Railway's server ✅
+
+---
+
+## 🎨 Part 2: Frontend Deployment (Vercel)
+
+### Step 1: Create Vercel Account
+
+1. Go to https://vercel.com
+2. Click **"Sign Up"**
+3. Sign up with **GitHub** (recommended)
+4. Authorize Vercel to access your GitHub repositories
+
+### Step 2: Import Project
+
+1. Click **"Add New..."** → **"Project"**
+2. Find your repository: `VA_Advisor_Appointment_Scheduler`
+3. Click **"Import"**
+
+### Step 3: Configure Project Settings
+
+**⚠️ IMPORTANT Settings:**
+- **Framework Preset**: Vite (should auto-detect)
+- **Root Directory**: `frontend` ⚠️ **MUST SET THIS!**
+- **Build Command**: `npm run build` (should auto-fill)
+- **Output Directory**: `dist` (should auto-fill)
+- **Install Command**: `npm install` (should auto-fill)
+
+### Step 4: Add Environment Variable
+
+1. Scroll down to **Environment Variables** section
+2. Click **"Add"**
+3. Add:
+   ```
+   Variable Name: VITE_API_BASE_URL
+   Value: https://your-app-name.up.railway.app
+   ```
+   (Replace with your Railway backend URL from Part 1, Step 5)
+
+### Step 5: Deploy Frontend
+
+1. Click **"Deploy"** button
+2. Wait for build to complete (2-3 minutes)
+3. Once deployed, Vercel provides a URL: `https://your-app-name.vercel.app`
+4. **Copy this URL** - this is your frontend URL
+
+### Step 6: Update Backend CORS
+
+1. Go back to Railway dashboard
+2. Go to **Variables** tab
+3. Update `FRONTEND_URL` to: `https://your-app-name.vercel.app`
+4. Railway will automatically redeploy with updated CORS settings
+
+### Step 7: Test Frontend
+
+1. Open your Vercel URL: `https://your-app-name.vercel.app`
+2. The page should load without errors
+3. Open browser console (F12) and check for errors
+4. Try clicking "Voice Agent" button
+5. Test a complete booking flow
+
+---
+
+## 💾 SQLite Database on Railway
+
+### How It Works
+
+**✅ Database is deployed with backend on Railway:**
+
+1. **Database File Location**
+   - File: `bookings.db` (stored on Railway's server)
+   - Created automatically on first backend start
+   - Railway automatically persists this file
+
+2. **Persistence**
+   - ✅ Railway automatically persists files in project directory
+   - ✅ Database survives redeployments
+   - ✅ No additional setup needed
+   - ✅ File is on Railway's server, not accessible from outside
+
+3. **What's Stored**
+   - `bookings` table - All booking records
+   - `conversation_logs` table - Voice agent conversation history
+
+4. **No Separate Database Service Needed**
+   - SQLite is file-based (single file)
+   - Runs with your backend on Railway
+   - No database connection strings or credentials needed
+
+### Database Lifecycle
+
+```
+First Deployment:
+  Backend starts → TypeORM creates bookings.db → Tables created → Ready!
+
+Redeployment:
+  Backend redeploys → bookings.db persists → Data intact → Ready!
+
+Data Storage:
+  All bookings and logs → Stored in bookings.db → On Railway's server
+```
+
+### Database Backup
+
+**⚠️ Important: Set up backups for production data**
+
+**Options:**
+1. **Railway's Built-in Backup** (if available)
+   - Check Railway dashboard for backup features
+2. **Manual Backup**
+   - Download database file via Railway CLI or dashboard
+   - Backup before major deployments
+3. **Automated Script** (Advanced)
+   - Use Railway's scheduled jobs for automated backups
+
+---
+
+## ✅ Post-Deployment Verification
+
+### Backend Verification
+
+- [ ] Backend URL accessible: `https://your-app.up.railway.app`
+- [ ] Health check works: `GET /bookings/debug/all`
+- [ ] Database file created (check Railway logs)
+- [ ] Can create bookings via API
+- [ ] Data persists after redeploy
+
+### Frontend Verification
+
+- [ ] Frontend URL accessible: `https://your-app.vercel.app`
+- [ ] Page loads without errors
+- [ ] No CORS errors in browser console
+- [ ] Can connect to backend API
+- [ ] Voice agent works
+
+### Database Verification
+
+- [ ] Database file exists on Railway server
+- [ ] Can create bookings (test via UI)
+- [ ] Bookings persist after page refresh
+- [ ] Conversation logs are being saved
+- [ ] Data survives redeployments
+
+### Integration Verification
+
+- [ ] Frontend can connect to backend (check browser console)
+- [ ] CORS is configured correctly (no CORS errors)
+- [ ] Voice agent can process messages
+- [ ] Bookings are being created in database
+- [ ] Complete booking flow works end-to-end
+
+---
+
+## 🐛 Deployment Troubleshooting
+
+### Backend Issues
+
+**Build Fails:**
+- Check Railway logs for specific error
+- Verify all dependencies are in `package.json`
+- Check for TypeScript compilation errors
+
+**Backend Not Starting:**
+- Verify `start:prod` command is correct
+- Check all required environment variables are set
+- Review logs for error messages
+
+**502 Bad Gateway:**
+- Backend might be starting up (wait 1-2 minutes)
+- Check if backend process is running
+- Review logs for crashes
+
+### Frontend Issues
+
+**Build Fails:**
+- Verify `frontend` is set as root directory
+- Check build command: `npm run build`
+- Review for TypeScript errors
+
+**API Connection Errors:**
+- Verify `VITE_API_BASE_URL` is set correctly
+- Check backend URL is accessible
+- Verify CORS is configured in backend
+
+**Blank Page:**
+- Check browser console for errors
+- Verify build output directory is `dist`
+- Check if index.html exists in dist folder
+
+### Database Issues
+
+**Database Not Persisting:**
+- Railway automatically persists - verify `DATABASE_PATH` is set
+- Check Railway logs for database creation
+- Test: Create booking → Redeploy → Check if booking exists
+
+**Database Locked:**
+- Railway runs single instance by default - should not occur
+- Check for concurrent writes in your code
+
+**Database File Not Found:**
+- Database is created automatically on first run
+- Check Railway logs for database path
+- Verify `DATABASE_PATH` environment variable
+
+### CORS Issues
+
+**CORS Errors in Browser:**
+- Verify `FRONTEND_URL` in Railway matches Vercel URL exactly
+- Check backend logs for CORS configuration
+- Ensure no trailing slashes in URLs
+- Verify credentials are enabled if using cookies
 
 ## 🧪 Testing
 
