@@ -33,5 +33,10 @@ async function bootstrap() {
     console.log(`  GET  /test - Test endpoint`);
     console.log(`  GET  /bookings/debug/all - Get all bookings`);
     console.log(`  POST /voice/session/start - Start voice session`);
+    console.log(`✅ Server started successfully!`);
 }
-bootstrap();
+
+bootstrap().catch((error) => {
+    console.error('❌ Failed to start application:', error);
+    process.exit(1);
+});
