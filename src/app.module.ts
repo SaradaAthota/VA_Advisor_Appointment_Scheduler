@@ -6,8 +6,10 @@ import { McpModule } from './mcp/mcp.module';
 import { VoiceModule } from './voice/voice.module';
 import { BookingEntity } from './booking/entities/booking.entity';
 import { ConversationLogEntity } from './voice/services/conversation-log.service';
+import { AppController } from './app.controller';
 
 @Module({
+  controllers: [AppController],
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
