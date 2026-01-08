@@ -293,16 +293,22 @@ A comprehensive voice agent system for booking advisor appointments with topic a
 3. Choose your repository: `VA_Advisor_Appointment_Scheduler`
 4. Railway will automatically detect it's a Node.js project
 
-### Step 3: Configure Build Settings
+### Step 3: Configure Build Settings (Backend Only)
+
+**⚠️ Important: We're deploying ONLY the backend to Railway. The frontend will be deployed separately to Vercel.**
 
 1. Click on your service
 2. Go to **Settings** tab
 3. Scroll to **Build & Deploy** section
 4. Configure:
-   - **Root Directory**: `.` (project root)
+   - **Root Directory**: `.` (project root - this is where the backend code is)
+     - ✅ This tells Railway to build from the root directory (where `package.json`, `src/`, etc. are located)
+     - ✅ The frontend is in `frontend/` subdirectory, so Railway will NOT try to build it
    - **Build Command**: `npm install && npm run build`
+     - This installs dependencies and builds the NestJS backend
    - **Start Command**: `npm run start:prod`
-   - **Watch Paths**: Leave default
+     - This starts the production backend server
+   - **Watch Paths**: Leave default (or set to `src/**` to watch backend changes only)
 
 ### Step 4: Add Environment Variables
 
