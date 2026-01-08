@@ -37,5 +37,13 @@ export class AppController {
       timestamp: new Date().toISOString(),
     };
   }
+
+  @Get('test')
+  getTest() {
+    return {
+      message: 'AppController is working!',
+      timestamp: new Date().toISOString(),
+    };
+  }
 }
 

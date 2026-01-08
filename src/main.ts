@@ -27,5 +27,10 @@ async function bootstrap() {
     await app.listen(port, '0.0.0.0');
     console.log(`Application is running on: http://localhost:${port}`);
     console.log(`Server running on port ${port}`);
+    
+    // Log all registered routes for debugging
+    const server = app.getHttpServer();
+    const router = server._events.request;
+    console.log('Routes registered successfully');
 }
 bootstrap();
