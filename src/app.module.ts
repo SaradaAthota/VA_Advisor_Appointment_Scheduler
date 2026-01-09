@@ -31,10 +31,11 @@ import { AppController } from './app.controller';
         console.error('========================================');
         console.error('🔍 DATABASE CONFIGURATION CHECK');
         console.error('========================================');
-        console.error('DATABASE_URL from ConfigService:', !!configService.get<string>('DATABASE_URL'));
-        console.error('DATABASE_URL from process.env:', !!process.env.DATABASE_URL);
-        console.error('DATABASE_URL value (first 50 chars):', databaseUrl ? `${databaseUrl.substring(0, 50)}...` : 'NOT SET');
-        console.error('All DATABASE/POSTGRES env vars:', Object.keys(process.env).filter(k => k.includes('DATABASE') || k.includes('POSTGRES')).join(', '));
+        console.error('DATABASE_URL from ConfigService:', configService.get<string>('DATABASE_URL') || 'NOT FOUND');
+        console.error('DATABASE_URL from process.env:', process.env.DATABASE_URL || 'NOT FOUND');
+        console.error('POSTGRES_URL from process.env:', process.env.POSTGRES_URL || 'NOT FOUND');
+        console.error('All process.env keys:', Object.keys(process.env).sort().join(', '));
+        console.error('DATABASE_URL value (first 100 chars):', databaseUrl ? `${databaseUrl.substring(0, 100)}...` : 'NOT SET');
         console.error('========================================');
 
         const hasPostgresUrl = databaseUrl && (

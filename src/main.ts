@@ -8,8 +8,10 @@ async function bootstrap() {
     console.error('🚀 APPLICATION STARTING');
     console.error('========================================');
     console.error('DATABASE_URL exists:', !!process.env.DATABASE_URL);
-    console.error('DATABASE_URL preview:', process.env.DATABASE_URL ? `${process.env.DATABASE_URL.substring(0, 50)}...` : 'NOT SET');
+    console.error('DATABASE_URL full value:', process.env.DATABASE_URL || 'NOT SET');
+    console.error('POSTGRES_URL:', process.env.POSTGRES_URL || 'NOT SET');
     console.error('NODE_ENV:', process.env.NODE_ENV);
+    console.error('All env vars with DATABASE or POSTGRES:', Object.keys(process.env).filter(k => k.toUpperCase().includes('DATABASE') || k.toUpperCase().includes('POSTGRES')).join(', '));
     console.error('========================================');
 
     const app = await NestFactory.create(AppModule);
