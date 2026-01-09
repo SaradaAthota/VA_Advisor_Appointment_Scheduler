@@ -10,7 +10,7 @@ import { Topic } from '../../domain/models/topic.enum';
 
 /**
  * Booking Entity for Database Persistence
- * Stores booking information in SQLite database
+ * Stores booking information in database (SQLite or PostgreSQL)
  */
 @Entity('bookings')
 export class BookingEntity {
@@ -29,10 +29,10 @@ export class BookingEntity {
   @Column('text')
   preferredSlotId: string;
 
-  @Column('datetime')
+  @Column('timestamp')
   preferredSlotStartTime: Date;
 
-  @Column('datetime')
+  @Column('timestamp')
   preferredSlotEndTime: Date;
 
   @Column('boolean', { default: true })
@@ -41,10 +41,10 @@ export class BookingEntity {
   @Column('text', { nullable: true })
   alternativeSlotId?: string;
 
-  @Column('datetime', { nullable: true })
+  @Column('timestamp', { nullable: true })
   alternativeSlotStartTime?: Date;
 
-  @Column('datetime', { nullable: true })
+  @Column('timestamp', { nullable: true })
   alternativeSlotEndTime?: Date;
 
   @Column('boolean', { nullable: true })
