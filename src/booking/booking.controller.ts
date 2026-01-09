@@ -92,6 +92,9 @@ export class BookingController {
   async createBooking(
     @Body() createBookingDto: CreateBookingDto,
   ): Promise<BookingResponseDto> {
+    console.error('🔥🔥🔥 POST /bookings/create HIT 🔥🔥🔥');
+    console.error('Request body:', JSON.stringify(createBookingDto, null, 2));
+    console.error('Database connection type:', this.bookingService.constructor.name);
     try {
       // Convert DTO slots to domain Slot objects
       const preferredSlot: Slot = {

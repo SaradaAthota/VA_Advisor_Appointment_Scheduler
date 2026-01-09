@@ -313,8 +313,14 @@ export class BookingService {
         preferredSlot: Slot,
         alternativeSlot?: Slot,
     ) {
+        console.error('🔥🔥🔥 BookingService.createBooking called 🔥🔥🔥');
+        console.error('Topic:', topic);
+        console.error('Preferred Slot:', JSON.stringify(preferredSlot));
+        
         // Check if preferred slot is already booked
+        console.error('🔍 Checking booked slots from database...');
         const bookedSlots = await this.getBookedSlots();
+        console.error('📊 Found booked slots:', bookedSlots.length);
         const isPreferredSlotBooked = bookedSlots.some(
             (booked) => booked.id === preferredSlot.id,
         );
@@ -359,9 +365,22 @@ export class BookingService {
         );
         
         // Save to database
+        console.error('💾 Saving booking to database...');
+        console.error('Database repository type:', this.bookingRepository.constructor.name);
         const entity = this.domainToEntity(booking);
-        const savedEntity = await this.bookingRepository.save(entity);
-        return this.entityToDomain(savedEntity);
+        console.error('Entity to save:', JSON.stringify(entity, null, 2));
+        try {
+            const savedEntity = await this.bookingRepository.save(entity);
+            console.error('✅✅✅ Booking saved successfully to database! ✅✅✅');
+            console.error('Saved entity ID:', savedEntity.id);
+            return this.entityToDomain(savedEntity);
+        } catch (error) {
+            console.error('❌❌❌ DATABASE SAVE ERROR ❌❌❌');
+            console.error('Error:', error);
+            console.error('Error message:', error instanceof Error ? error.message : 'Unknown error');
+            console.error('Error stack:', error instanceof Error ? error.stack : 'No stack');
+            throw error;
+        }
     }
 
     /**
