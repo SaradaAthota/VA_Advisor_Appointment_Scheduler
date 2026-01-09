@@ -45,5 +45,26 @@ export class AppController {
       timestamp: new Date().toISOString(),
     };
   }
+
+  @Get('db-info')
+  getDbInfo() {
+    const databaseUrl = process.env.DATABASE_URL || 
+                       process.env.POSTGRES_URL || 
+                       process.env.POSTGRES_PRIVATE_URL;
+    
+    const isPostgres = databaseUrl && (
+      databaseUrl.startsWith('postgresql://') || 
+      databaseUrl.startsWith('postgres://')
+    );
+    
+    return {
+      databaseType: isPostgres ? 'postgresql' : 'sqlite',
+      hasDatabaseUrl: !!databaseUrl,
+      databaseUrlPreview: databaseUrl 
+        ? `${databaseUrl.substring(0, 30)}...` 
+        : 'not set',
+      timestamp: new Date().toISOString(),
+    };
+  }
 }
 
