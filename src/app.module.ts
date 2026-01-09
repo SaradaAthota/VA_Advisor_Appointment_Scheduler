@@ -25,9 +25,11 @@ import { AppController } from './app.controller';
           return {
             type: 'postgres',
             url: databaseUrl,
-            ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
             autoLoadEntities: true,
-            synchronize: true, // Enable for initial setup - tables will be auto-created
+            synchronize: process.env.DATABASE_SYNC === 'true', // Disable in production, use migrations instead
+            ssl: {
+              rejectUnauthorized: false, // Required for Railway PostgreSQL
+            },
             logging: process.env.NODE_ENV === 'development',
           };
         } else {
@@ -37,7 +39,7 @@ import { AppController } from './app.controller';
             type: 'sqlite',
             database: process.env.DATABASE_PATH || 'bookings.db',
             entities: [BookingEntity, ConversationLogEntity],
-            synchronize: true, // Enable for local development
+            synchronize: true, // Enable for local development only
             logging: process.env.NODE_ENV === 'development',
           };
         }
