@@ -453,13 +453,64 @@ GMAIL_ENABLED=true
 3. Update `FRONTEND_URL` to: `https://your-app-name.vercel.app`
 4. Railway will automatically redeploy with updated CORS settings
 
-### Step 7: Test Frontend
+### Step 7: Test Frontend in Production
 
-1. Open your Vercel URL: `https://your-app-name.vercel.app`
-2. The page should load without errors
-3. Open browser console (F12) and check for errors
-4. Try clicking "Voice Agent" button
-5. Test a complete booking flow
+1. **Open your Vercel URL:**
+   - Navigate to: `https://your-app-name.vercel.app`
+   - The page should load without errors
+
+2. **Verify Basic Functionality:**
+   - ✅ Page loads successfully
+   - ✅ No console errors (press F12 to open browser console)
+   - ✅ No CORS errors in console
+   - ✅ UI elements are visible and styled correctly
+
+3. **Test Booking Lookup:**
+   - Enter a booking code (if you have one from previous tests)
+   - Verify booking details are displayed correctly
+   - Test with invalid booking code to see error handling
+
+4. **Test Voice Agent:**
+   - Click the **"Voice Agent"** button
+   - Modal should open with voice agent interface
+   - **Text Mode Test:**
+     - Type a message: "Hello"
+     - Verify you get a greeting response
+     - Try: "I want to book an appointment for KYC onboarding"
+     - Follow the conversation flow
+   - **Voice Mode Test (if microphone is available):**
+     - Click microphone button
+     - Speak clearly: "Hello"
+     - Verify transcription appears
+     - Verify voice response plays back
+
+5. **Test Complete Booking Flow:**
+   - Start a new conversation via Voice Agent
+   - Select a topic (e.g., "KYC onboarding")
+   - Choose a time preference (e.g., "Monday morning")
+   - Select a slot from the offered options
+   - Confirm the booking
+   - Complete booking with contact details
+   - Verify booking code is generated
+   - Verify confirmation message appears
+
+6. **Verify Backend Integration:**
+   - Check browser Network tab (F12 → Network)
+   - Verify API calls are going to your Railway backend URL
+   - Verify responses are successful (status 200)
+   - Check that bookings are being created in database
+
+7. **Test on Different Devices:**
+   - Test on desktop browser
+   - Test on mobile device (if applicable)
+   - Verify responsive design works correctly
+
+**Expected Behavior:**
+- ✅ All API calls succeed
+- ✅ Voice agent conversation flows smoothly
+- ✅ Bookings are created and stored
+- ✅ No errors in browser console
+- ✅ UI is responsive and user-friendly
 
 ---
 
