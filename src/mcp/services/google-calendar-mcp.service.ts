@@ -66,6 +66,33 @@ export class GoogleCalendarMcpService implements ICalendarMcp {
   }
 
   /**
+   * Converts a Date to IST timezone string for Google Calendar API
+   * The input date is in UTC, but represents IST time
+   * We need to convert UTC time to IST by subtracting 5.5 hours
+   * 
+   * Example: If date is 2026-01-20T10:00:00.000Z (10 AM UTC, but meant to be 10 AM IST)
+   * We convert: 10 AM UTC - 5.5 hours = 4:30 AM UTC (which is 10 AM IST)
+   * Format as: 2026-01-20T04:30:00+05:30
+   */
+  private formatDateTimeForIST(date: Date): string {
+    // The date is in UTC, but represents IST time
+    // Convert: subtract 5.5 hours (IST offset) to get correct UTC time
+    const istOffsetMs = 5.5 * 60 * 60 * 1000; // 5.5 hours in milliseconds
+    const istDate = new Date(date.getTime() - istOffsetMs);
+    
+    // Get UTC components of the adjusted date
+    const year = istDate.getUTCFullYear();
+    const month = String(istDate.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(istDate.getUTCDate()).padStart(2, '0');
+    const hours = String(istDate.getUTCHours()).padStart(2, '0');
+    const minutes = String(istDate.getUTCMinutes()).padStart(2, '0');
+    const seconds = String(istDate.getUTCSeconds()).padStart(2, '0');
+    
+    // Format as RFC3339 with IST offset: YYYY-MM-DDTHH:mm:ss+05:30
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}+05:30`;
+  }
+
+  /**
    * Creates a calendar event
    * Uses real Google Calendar API if credentials are configured, otherwise uses mock
    */
@@ -75,6 +102,11 @@ export class GoogleCalendarMcpService implements ICalendarMcp {
   ): Promise<{ eventId: string; htmlLink?: string }> {
     if (this.useRealApi && this.calendar) {
       try {
+        // Convert dates to IST format for Google Calendar
+        // The slot times are in UTC, but represent IST times, so we format them as IST
+        const startDateTime = this.formatDateTimeForIST(slot.startTime);
+        const endDateTime = this.formatDateTimeForIST(slot.endTime);
+        
         // Use real Google Calendar API
         const event = await this.calendar.events.insert({
           calendarId: this.calendarId,
@@ -82,11 +114,11 @@ export class GoogleCalendarMcpService implements ICalendarMcp {
             summary: title,
             description: `Booking code: ${title.split('—')[2]?.trim() || 'N/A'}`,
             start: {
-              dateTime: slot.startTime.toISOString(),
+              dateTime: startDateTime,
               timeZone: 'Asia/Kolkata',
             },
             end: {
-              dateTime: slot.endTime.toISOString(),
+              dateTime: endDateTime,
               timeZone: 'Asia/Kolkata',
             },
             status: 'tentative',
@@ -161,17 +193,19 @@ export class GoogleCalendarMcpService implements ICalendarMcp {
 
         // Update the first matching event
         const event = events.data.items[0];
+        const startDateTime = this.formatDateTimeForIST(newSlot.startTime);
+        const endDateTime = this.formatDateTimeForIST(newSlot.endTime);
         const updatedEvent = await this.calendar.events.update({
           calendarId: this.calendarId,
           eventId: event.id!,
           requestBody: {
             ...event,
             start: {
-              dateTime: newSlot.startTime.toISOString(),
+              dateTime: startDateTime,
               timeZone: 'Asia/Kolkata',
             },
             end: {
-              dateTime: newSlot.endTime.toISOString(),
+              dateTime: endDateTime,
               timeZone: 'Asia/Kolkata',
             },
           },
