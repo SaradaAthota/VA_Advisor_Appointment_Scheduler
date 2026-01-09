@@ -11,6 +11,11 @@ export class AppController {
       version: '1.0.0',
       status: 'running',
       endpoints: {
+        system: {
+          'GET /health': 'Health check',
+          'GET /test': 'Test endpoint',
+          'GET /db-info': 'Database information and connection status',
+        },
         bookings: {
           'GET /bookings/:bookingCode': 'Get booking by code',
           'POST /bookings/:bookingCode/complete': 'Complete booking with contact details',
