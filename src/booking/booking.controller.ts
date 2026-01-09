@@ -310,7 +310,7 @@ export class BookingController {
       // This helps verify if bookings exist after server restart
       const entities = await this.bookingService.getAllBookingsFromDb();
       const allBookings: Booking[] = [];
-      
+
       for (const entity of entities) {
         try {
           const booking = await this.bookingService.findByBookingCode(entity.bookingCode);
@@ -322,7 +322,7 @@ export class BookingController {
           // Continue with other bookings even if one fails
         }
       }
-      
+
       return {
         count: allBookings.length,
         bookings: allBookings.map((booking) => this.mapToResponseDto(booking)),
