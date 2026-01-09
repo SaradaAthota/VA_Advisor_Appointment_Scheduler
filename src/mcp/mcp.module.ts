@@ -23,6 +23,7 @@ import { GoogleOAuthService } from './services/google-oauth.service';
     GmailMcpService,
   ],
   exports: [
+    GoogleOAuthService,
     GoogleCalendarMcpService,
     GoogleSheetsMcpService,
     GmailMcpService,

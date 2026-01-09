@@ -19,7 +19,7 @@ import { AppController } from './app.controller';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
         // Check multiple possible variable names Railway might use
-        const databaseUrl = 
+        const databaseUrl =
           configService.get<string>('DATABASE_URL') ||
           configService.get<string>('POSTGRES_URL') ||
           configService.get<string>('POSTGRES_PRIVATE_URL') ||
@@ -45,11 +45,11 @@ import { AppController } from './app.controller';
           databaseUrl.includes('postgres.railway.internal') ||
           databaseUrl.includes('@postgres')
         );
-        
+
         console.error('hasPostgresUrl check result:', hasPostgresUrl);
         console.error('databaseUrl type:', typeof databaseUrl);
         console.error('databaseUrl length:', databaseUrl ? databaseUrl.length : 0);
-        
+
         if (hasPostgresUrl) {
           console.error('✅✅✅ USING POSTGRESQL DATABASE ✅✅✅');
           const syncValue = configService.get<string>('DATABASE_SYNC') === 'true' || process.env.DATABASE_SYNC === 'true';
@@ -83,6 +83,7 @@ import { AppController } from './app.controller';
     McpModule,
     VoiceModule,
   ],
+  providers: [],
 })
-export class AppModule {}
+export class AppModule { }
 
