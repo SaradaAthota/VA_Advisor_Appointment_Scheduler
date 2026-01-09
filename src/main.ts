@@ -30,23 +30,23 @@ async function bootstrap() {
     // Enable CORS for frontend
     // Support both Vercel deployment and local development
     const frontendUrl = process.env.FRONTEND_URL;
-    const allowedOrigins = frontendUrl 
+    const allowedOrigins = frontendUrl
         ? [frontendUrl, 'http://localhost:5173', 'http://localhost:3000']
         : ['http://localhost:5173', 'http://localhost:3000'];
-    
+
     app.enableCors({
         origin: (origin, callback) => {
             // Allow requests with no origin (like mobile apps or curl requests)
             if (!origin) return callback(null, true);
-            
+
             // Check if origin is in allowed list
             if (allowedOrigins.includes(origin)) {
                 callback(null, true);
-            } 
+            }
             // Allow Vercel preview deployments (if FRONTEND_URL is a Vercel domain)
             else if (frontendUrl && origin.includes('.vercel.app')) {
                 callback(null, true);
-            } 
+            }
             else {
                 console.error(`CORS blocked origin: ${origin}`);
                 callback(new Error('Not allowed by CORS'));

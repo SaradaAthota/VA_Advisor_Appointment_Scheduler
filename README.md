@@ -44,8 +44,9 @@ A comprehensive voice agent system for booking advisor appointments with topic a
   - `@nestjs/config`: Configuration management
   - `@nestjs/typeorm`: TypeORM integration
 - **Database**: 
-  - SQLite 3 (via `sqlite3` 5.1.7)
+  - PostgreSQL (via `pg` - Railway managed)
   - TypeORM 0.3.28 (ORM)
+  - SQLite 3 (via `sqlite3` 5.1.7) - for local development only
 - **Validation**: 
   - `class-validator` 0.14.0
   - `class-transformer` 0.5.1
@@ -199,8 +200,11 @@ A comprehensive voice agent system for booking advisor appointments with topic a
    PORT=3000
    FRONTEND_URL=http://localhost:5173
 
-   # Database (SQLite - created automatically)
-   DATABASE_PATH=bookings.db
+   # Database (PostgreSQL for production, SQLite for local)
+   # For local development, SQLite is used automatically
+   # For production, set DATABASE_URL from Railway PostgreSQL service
+   DATABASE_URL=postgresql://postgres:password@localhost:5432/your_db
+   DATABASE_SYNC=true
 
    # OpenAI (Required for Voice Agent)
    OPENAI_API_KEY=your_openai_api_key
@@ -263,17 +267,17 @@ A comprehensive voice agent system for booking advisor appointments with topic a
 │  │   (Backend)      │◄────────┤   (Frontend)     │     │
 │  │                  │  API    │                  │     │
 │  │  • Node.js App   │  Calls  │  • React App     │     │
-│  │  • SQLite DB     │         │  • Static Files   │     │
-│  │  (bookings.db)   │         │                  │     │
+│  │  • PostgreSQL    │         │  • Static Files   │     │
+│  │  (Railway DB)    │         │                  │     │
 │  └──────────────────┘         └──────────────────┘     │
 │                                                           │
 └─────────────────────────────────────────────────────────┘
 ```
 
 **Key Points:**
-- ✅ **Backend + Database** → Railway (SQLite database is deployed with backend)
+- ✅ **Backend** → Railway (Node.js NestJS application)
+- ✅ **Database** → Railway PostgreSQL (managed database service)
 - ✅ **Frontend** → Vercel (React static files)
-- ✅ **No separate database service needed** - SQLite runs with backend
 
 ---
 
@@ -293,26 +297,29 @@ A comprehensive voice agent system for booking advisor appointments with topic a
 3. Choose your repository: `VA_Advisor_Appointment_Scheduler`
 4. Railway will automatically detect it's a Node.js project
 
-### Step 3: Configure Build Settings (Backend Only)
+### Step 3: Add PostgreSQL Database
+
+1. In your Railway project, click **"+ New"** → **"Database"** → **"Add PostgreSQL"**
+2. Railway will automatically create a PostgreSQL database
+3. **Copy the `DATABASE_URL`** from the database service's **Variables** tab
+   - It will look like: `postgresql://postgres:password@hostname:5432/railway`
+   - You'll need this in the next step
+
+### Step 4: Configure Build Settings
 
 **⚠️ Important: We're deploying ONLY the backend to Railway. The frontend will be deployed separately to Vercel.**
 
-1. Click on your service
+1. Click on your **backend service** (not the database)
 2. Go to **Settings** tab
-3. Scroll to **Build & Deploy** section
-4. Configure:
-   - **Root Directory**: `.` (project root - this is where the backend code is)
-     - ✅ This tells Railway to build from the root directory (where `package.json`, `src/`, etc. are located)
-     - ✅ The frontend is in `frontend/` subdirectory, so Railway will NOT try to build it
-   - **Build Command**: `npm install && npm run build`
-     - This installs dependencies and builds the NestJS backend
-   - **Start Command**: `npm run start:prod`
-     - This starts the production backend server
-   - **Watch Paths**: Leave default (or set to `src/**` to watch backend changes only)
+3. **Root Directory**: Set to `.` (project root)
+4. **Build Command**: `npm install && npm run build` (or use `railway.json` which is already configured)
+5. **Start Command**: `npm run start:prod`
 
-### Step 4: Add Environment Variables
+**Note:** The project includes a `railway.json` file that automatically configures these settings.
 
-1. Go to **Variables** tab
+### Step 5: Add Environment Variables
+
+1. Go to your **backend service** → **Variables** tab
 2. Click **"New Variable"** for each variable
 3. Add the following (update values as needed):
 
@@ -321,8 +328,9 @@ NODE_ENV=production
 PORT=3000
 FRONTEND_URL=https://your-frontend.vercel.app
 
-# Database (SQLite) - Railway automatically persists this file
-DATABASE_PATH=bookings.db
+# Database (PostgreSQL) - Copy from Railway PostgreSQL service
+DATABASE_URL=postgresql://postgres:password@hostname:5432/railway
+DATABASE_SYNC=true
 
 # OpenAI (Required)
 OPENAI_API_KEY=sk-your-openai-key-here
@@ -340,32 +348,59 @@ GOOGLE_CALENDAR_ENABLED=true
 GOOGLE_SHEETS_PRE_BOOKINGS_SPREADSHEET_ID=
 GOOGLE_SHEETS_SHEET_NAME=Sheet1
 GOOGLE_SHEETS_ENABLED=true
-GOOGLE_DOCS_PRE_BOOKINGS_DOC_ID=
-GOOGLE_DOCS_ENABLED=true
 ADVISOR_EMAIL=advisor@example.com
 GMAIL_ENABLED=true
 ```
 
 **Important Notes:**
+- `DATABASE_URL` - Copy this from your PostgreSQL service's Variables tab in Railway
+- `DATABASE_SYNC=true` - Enables automatic table creation (set to `false` in production after initial setup)
 - Replace `your-openai-key-here` with your actual OpenAI API key
-- `FRONTEND_URL` - Update this after deploying frontend (Step 6)
-- `DATABASE_PATH=bookings.db` - Railway automatically persists this file
+- `FRONTEND_URL` - Update this after deploying frontend (Step 6 in Part 2)
 - Google API variables can be empty if using mock mode
 
-### Step 5: Deploy Backend
+### Step 6: Deploy Backend & Generate Public Domain
 
-1. Railway will automatically start deploying
+1. Railway will automatically start deploying after you add environment variables
 2. Watch **Deploy Logs** tab for progress
 3. Wait for "Build successful" message
-4. Once deployed, Railway provides a URL: `https://your-app-name.up.railway.app`
+4. **Generate Public Domain:**
+   - Go to **Settings** tab
+   - Scroll to **Networking** section
+   - Under **"Public Networking"**, click **"Generate Domain"** button
+   - Wait a few seconds for Railway to create the domain
+   - Your backend URL will appear (e.g., `https://your-app-name.up.railway.app`)
 5. **Copy this URL** - you'll need it for frontend configuration
 
-### Step 6: Verify Backend & Database
+### Step 7: Verify Backend & Database
 
-1. Test backend health: `https://your-app-name.up.railway.app/bookings/debug/all`
-   - Should return JSON (empty array if no bookings)
-2. Database is automatically created on first run
-3. Database file (`bookings.db`) persists on Railway's server ✅
+**Quick Verification:**
+
+1. **Get your backend URL:**
+   - Railway dashboard → Settings → Networking → Copy Public Domain URL
+   - Example: `https://your-app-name.up.railway.app`
+
+2. **Test root endpoint:**
+   - Open: `https://your-app-name.up.railway.app/`
+   - ✅ Should return JSON with API information and database status
+
+3. **Test database endpoint:**
+   - Open: `https://your-app-name.up.railway.app/db-info`
+   - ✅ Should return database type (PostgreSQL) and connection status
+
+4. **Test bookings endpoint:**
+   - Open: `https://your-app-name.up.railway.app/bookings/debug/all`
+   - ✅ Should return JSON: `[]` (empty array) or booking data
+
+5. **Check Railway logs:**
+   - Go to **Deploy Logs** tab
+   - Look for: "Server running on port 8080"
+   - ✅ No error messages
+
+**Database:**
+- PostgreSQL database is automatically created by Railway
+- Tables are created automatically when `DATABASE_SYNC=true`
+- Database persists on Railway's managed PostgreSQL service ✅
 
 ---
 
@@ -428,57 +463,51 @@ GMAIL_ENABLED=true
 
 ---
 
-## 💾 SQLite Database on Railway
+## 💾 PostgreSQL Database on Railway
 
 ### How It Works
 
-**✅ Database is deployed with backend on Railway:**
+**✅ Database is managed by Railway PostgreSQL service:**
 
-1. **Database File Location**
-   - File: `bookings.db` (stored on Railway's server)
-   - Created automatically on first backend start
-   - Railway automatically persists this file
+1. **Database Service**
+   - PostgreSQL database is created as a separate Railway service
+   - Managed by Railway (automatic backups, scaling, etc.)
+   - Connection string provided via `DATABASE_URL` environment variable
 
 2. **Persistence**
-   - ✅ Railway automatically persists files in project directory
+   - ✅ Railway automatically manages PostgreSQL persistence
    - ✅ Database survives redeployments
-   - ✅ No additional setup needed
-   - ✅ File is on Railway's server, not accessible from outside
+   - ✅ Automatic backups (Railway managed)
+   - ✅ Production-ready and scalable
 
 3. **What's Stored**
    - `bookings` table - All booking records
    - `conversation_logs` table - Voice agent conversation history
 
-4. **No Separate Database Service Needed**
-   - SQLite is file-based (single file)
-   - Runs with your backend on Railway
-   - No database connection strings or credentials needed
+4. **Table Creation**
+   - Tables are created automatically when `DATABASE_SYNC=true`
+   - After initial setup, set `DATABASE_SYNC=false` for production safety
+   - Or use TypeORM migrations for production deployments
 
 ### Database Lifecycle
 
 ```
 First Deployment:
-  Backend starts → TypeORM creates bookings.db → Tables created → Ready!
+  PostgreSQL service created → Backend connects → Tables created → Ready!
 
 Redeployment:
-  Backend redeploys → bookings.db persists → Data intact → Ready!
+  Backend redeploys → Connects to existing PostgreSQL → Data intact → Ready!
 
 Data Storage:
-  All bookings and logs → Stored in bookings.db → On Railway's server
+  All bookings and logs → Stored in PostgreSQL → Railway managed service
 ```
 
 ### Database Backup
 
-**⚠️ Important: Set up backups for production data**
-
-**Options:**
-1. **Railway's Built-in Backup** (if available)
-   - Check Railway dashboard for backup features
-2. **Manual Backup**
-   - Download database file via Railway CLI or dashboard
-   - Backup before major deployments
-3. **Automated Script** (Advanced)
-   - Use Railway's scheduled jobs for automated backups
+**✅ Railway automatically handles PostgreSQL backups:**
+- Railway manages automatic backups for PostgreSQL services
+- Check Railway dashboard for backup and restore options
+- No manual backup setup required
 
 ---
 
@@ -502,7 +531,9 @@ Data Storage:
 
 ### Database Verification
 
-- [ ] Database file exists on Railway server
+- [ ] PostgreSQL service is running in Railway
+- [ ] `DATABASE_URL` is set correctly
+- [ ] Database tables created (check `/db-info` endpoint)
 - [ ] Can create bookings (test via UI)
 - [ ] Bookings persist after page refresh
 - [ ] Conversation logs are being saved
@@ -532,10 +563,15 @@ Data Storage:
 - Check all required environment variables are set
 - Review logs for error messages
 
-**502 Bad Gateway:**
+**502 Bad Gateway / Application failed to respond:**
+- **First**: Check Railway **Deploy Logs** tab for error messages
 - Backend might be starting up (wait 1-2 minutes)
 - Check if backend process is running
 - Review logs for crashes
+- Verify Start Command is `npm run start:prod` (not build command)
+- Check if `dist/main.js` exists (build must complete successfully)
+- Verify environment variables are set (especially `PORT` and `OPENAI_API_KEY`)
+- See `TROUBLESHOOT_RAILWAY_ERROR.md` for detailed debugging steps
 
 ### Frontend Issues
 
@@ -556,19 +592,22 @@ Data Storage:
 
 ### Database Issues
 
+**Database Connection Failed:**
+- Verify `DATABASE_URL` is set correctly (copy from PostgreSQL service)
+- Check PostgreSQL service is running in Railway
+- Verify `DATABASE_SYNC=true` for initial table creation
+- Check Railway logs for connection errors
+
+**Tables Not Created:**
+- Ensure `DATABASE_SYNC=true` is set (for initial setup)
+- Check Railway logs for TypeORM errors
+- Verify `DATABASE_URL` format is correct
+- After initial setup, consider using migrations instead of sync
+
 **Database Not Persisting:**
-- Railway automatically persists - verify `DATABASE_PATH` is set
-- Check Railway logs for database creation
+- Railway PostgreSQL automatically persists data
 - Test: Create booking → Redeploy → Check if booking exists
-
-**Database Locked:**
-- Railway runs single instance by default - should not occur
-- Check for concurrent writes in your code
-
-**Database File Not Found:**
-- Database is created automatically on first run
-- Check Railway logs for database path
-- Verify `DATABASE_PATH` environment variable
+- Verify PostgreSQL service is not being deleted/recreated
 
 ### CORS Issues
 
@@ -663,18 +702,17 @@ test/
 
 ## 🔍 Viewing Data
 
-### Database (SQLite)
+### Database (PostgreSQL)
 
-The application uses SQLite database (`bookings.db`) to store:
+The application uses PostgreSQL database (production) or SQLite (local development) to store:
 - **Bookings**: All booking records with status, slots, and contact details
 - **Conversation Logs**: All voice agent conversations with transcriptions
 
 **Quick Access:**
-- Use **DB Browser for SQLite** (recommended): Download from https://sqlitebrowser.org/
-- Use **VS Code SQLite Extension**: Install "SQLite Viewer" extension
-- Use **API Endpoints**: `GET /voice/logs/all` or `GET /voice/logs/session/:sessionId`
-
-See `HOW_TO_VIEW_DATABASE.md` for detailed instructions on viewing the database.
+- **Production**: Use Railway PostgreSQL dashboard or connect via `DATABASE_URL`
+- **Local Development**: Use **DB Browser for SQLite** (recommended): Download from https://sqlitebrowser.org/
+- **API Endpoints**: `GET /voice/logs/all` or `GET /voice/logs/session/:sessionId`
+- **Database Info**: `GET /db-info` - Returns database type and connection status
 
 ### Conversation Logs
 
@@ -733,7 +771,7 @@ See `HOW_TO_VIEW_CONVERSATION_LOGS.md` for detailed instructions.
 - No PII on voice calls (no phone/email/account numbers)
 - Secure booking code format (NL-XXXX)
 - Contact details only collected during booking completion
-- All data stored locally in SQLite database
+- All data stored in PostgreSQL database (production) or SQLite (local development)
 
 ## 📝 Key Constraints
 
