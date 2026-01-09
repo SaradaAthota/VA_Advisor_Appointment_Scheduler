@@ -113,7 +113,13 @@ export class BookingService {
      */
     private domainToEntity(booking: Booking): BookingEntity {
         const entity = new BookingEntity();
-        entity.id = booking.id;
+        // Only set id if it's a valid UUID (for existing bookings)
+        // For new bookings, let PostgreSQL generate the UUID
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (booking.id && uuidRegex.test(booking.id)) {
+            entity.id = booking.id;
+        }
+        // If booking.id is not a valid UUID, don't set it - let PostgreSQL generate it
         entity.bookingCode = booking.bookingCode;
         entity.topic = booking.topic;
         entity.preferredSlotId = booking.preferredSlot.id;
