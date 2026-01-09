@@ -68,25 +68,20 @@ export class GoogleCalendarMcpService implements ICalendarMcp {
   /**
    * Converts a Date to IST timezone string for Google Calendar API
    * The input date is in UTC, but represents IST time
-   * We need to convert UTC time to IST by subtracting 5.5 hours
+   * We use the UTC components directly and format with IST offset
    * 
-   * Example: If date is 2026-01-20T10:00:00.000Z (10 AM UTC, but meant to be 10 AM IST)
-   * We convert: 10 AM UTC - 5.5 hours = 4:30 AM UTC (which is 10 AM IST)
-   * Format as: 2026-01-20T04:30:00+05:30
+   * Example: If date is 2026-01-20T10:00:00.000Z (stored as 10 AM UTC, but meant to be 10 AM IST)
+   * We format as: 2026-01-20T10:00:00+05:30 (Google Calendar will interpret as 10 AM IST)
    */
   private formatDateTimeForIST(date: Date): string {
     // The date is in UTC, but represents IST time
-    // Convert: subtract 5.5 hours (IST offset) to get correct UTC time
-    const istOffsetMs = 5.5 * 60 * 60 * 1000; // 5.5 hours in milliseconds
-    const istDate = new Date(date.getTime() - istOffsetMs);
-    
-    // Get UTC components of the adjusted date
-    const year = istDate.getUTCFullYear();
-    const month = String(istDate.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(istDate.getUTCDate()).padStart(2, '0');
-    const hours = String(istDate.getUTCHours()).padStart(2, '0');
-    const minutes = String(istDate.getUTCMinutes()).padStart(2, '0');
-    const seconds = String(istDate.getUTCSeconds()).padStart(2, '0');
+    // Use UTC components directly and format with IST offset
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const hours = String(date.getUTCHours()).padStart(2, '0');
+    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+    const seconds = String(date.getUTCSeconds()).padStart(2, '0');
     
     // Format as RFC3339 with IST offset: YYYY-MM-DDTHH:mm:ss+05:30
     return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}+05:30`;
