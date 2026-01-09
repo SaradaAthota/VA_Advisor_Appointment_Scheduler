@@ -1,7 +1,9 @@
 import { Controller, Get } from '@nestjs/common';
+import { DataSource } from 'typeorm';
 
 @Controller()
 export class AppController {
+  constructor(private dataSource: DataSource) {}
   @Get()
   getRoot() {
     return {
@@ -47,7 +49,7 @@ export class AppController {
   }
 
   @Get('db-info')
-  getDbInfo() {
+  async getDbInfo() {
     const databaseUrl = process.env.DATABASE_URL || 
                        process.env.POSTGRES_URL || 
                        process.env.POSTGRES_PRIVATE_URL;
@@ -57,12 +59,30 @@ export class AppController {
       databaseUrl.startsWith('postgres://')
     );
     
+    // Get actual database type from TypeORM connection
+    const actualDbType = this.dataSource.options.type;
+    const actualDbName = this.dataSource.options.database || 
+                        (this.dataSource.options as any).url?.substring(0, 30) || 
+                        'unknown';
+    
+    // Test database connection
+    let connectionStatus = 'unknown';
+    try {
+      await this.dataSource.query('SELECT 1');
+      connectionStatus = 'connected';
+    } catch (error) {
+      connectionStatus = `error: ${error instanceof Error ? error.message : 'unknown'}`;
+    }
+    
     return {
       databaseType: isPostgres ? 'postgresql' : 'sqlite',
+      actualDatabaseType: actualDbType,
+      actualDatabaseName: actualDbName,
       hasDatabaseUrl: !!databaseUrl,
       databaseUrlPreview: databaseUrl 
         ? `${databaseUrl.substring(0, 30)}...` 
         : 'not set',
+      connectionStatus: connectionStatus,
       timestamp: new Date().toISOString(),
     };
   }
