@@ -305,20 +305,37 @@ export class BookingController {
 
   @Get('debug/all')
   async getAllBookings(): Promise<{ count: number; bookings: BookingResponseDto[] }> {
-    // Debug endpoint to see all bookings in database
-    // This helps verify if bookings exist after server restart
-    const entities = await this.bookingService.getAllBookingsFromDb();
-    const allBookings: Booking[] = [];
-    for (const entity of entities) {
-      const booking = await this.bookingService.findByBookingCode(entity.bookingCode);
-      if (booking) {
-        allBookings.push(booking);
-      }
+    try {
+      // Debug endpoint to see all bookings in database
+      // This helps verify if bookings exist after server restart
+      const entities = await this.bookingService.getAllBookingsFromDb();
+      
+      // Simplify: just return the entities directly without complex mapping
+      return {
+        count: entities.length,
+        bookings: entities.map((entity) => ({
+          bookingCode: entity.bookingCode,
+          status: entity.status,
+          topic: entity.topic,
+          preferredSlotStartTime: entity.preferredSlotStartTime,
+          preferredSlotEndTime: entity.preferredSlotEndTime,
+          createdAt: entity.createdAt,
+          updatedAt: entity.updatedAt,
+        })),
+      };
+    } catch (error) {
+      console.error('Error in getAllBookings:', error);
+      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+      throw new HttpException(
+        {
+          statusCode: 500,
+          message: 'Internal server error',
+          error: error instanceof Error ? error.message : 'Unknown error',
+          details: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.stack : undefined) : undefined,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
-    return {
-      count: allBookings.length,
-      bookings: allBookings.map((booking) => this.mapToResponseDto(booking)),
-    };
   }
 
   @Post('test/create')

@@ -19,7 +19,8 @@ import { AppController } from './app.controller';
       type: 'sqlite',
       database: process.env.DATABASE_PATH || 'bookings.db',
       entities: [BookingEntity, ConversationLogEntity],
-      synchronize: process.env.NODE_ENV !== 'production' || process.env.DATABASE_SYNC === 'true', // Auto-create tables (disable in production)
+      // Enable synchronize for Railway (ephemeral) or when DATABASE_SYNC is true
+      synchronize: process.env.DATABASE_SYNC === 'true' || process.env.RAILWAY_ENVIRONMENT === 'true' || process.env.NODE_ENV !== 'production',
       logging: process.env.NODE_ENV === 'development',
     }),
     BookingModule,
