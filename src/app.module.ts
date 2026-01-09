@@ -15,14 +15,25 @@ import { AppController } from './app.controller';
       isGlobal: true,
       envFilePath: '.env',
     }),
-    TypeOrmModule.forRoot({
-      type: 'sqlite',
-      database: process.env.DATABASE_PATH || 'bookings.db',
-      entities: [BookingEntity, ConversationLogEntity],
-      // Enable synchronize for Railway (ephemeral) or when DATABASE_SYNC is true
-      synchronize: process.env.DATABASE_SYNC === 'true' || process.env.RAILWAY_ENVIRONMENT === 'true' || process.env.NODE_ENV !== 'production',
-      logging: process.env.NODE_ENV === 'development',
-    }),
+    TypeOrmModule.forRoot(
+      // Use PostgreSQL if DATABASE_URL is provided (Railway), otherwise SQLite (local dev)
+      process.env.DATABASE_URL
+        ? {
+            type: 'postgres',
+            url: process.env.DATABASE_URL,
+            ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+            autoLoadEntities: true,
+            synchronize: true, // Enable for initial setup - tables will be auto-created
+            logging: process.env.NODE_ENV === 'development',
+          }
+        : {
+            type: 'sqlite',
+            database: process.env.DATABASE_PATH || 'bookings.db',
+            entities: [BookingEntity, ConversationLogEntity],
+            synchronize: true, // Enable for local development
+            logging: process.env.NODE_ENV === 'development',
+          },
+    ),
     BookingModule,
     McpModule,
     VoiceModule,

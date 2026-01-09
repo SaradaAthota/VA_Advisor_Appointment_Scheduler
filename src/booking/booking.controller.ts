@@ -103,11 +103,11 @@ export class BookingController {
 
       const alternativeSlot: Slot | undefined = createBookingDto.alternativeSlot
         ? {
-            id: createBookingDto.alternativeSlot.id,
-            startTime: new Date(createBookingDto.alternativeSlot.startTime),
-            endTime: new Date(createBookingDto.alternativeSlot.endTime),
-            isAvailable: createBookingDto.alternativeSlot.isAvailable,
-          }
+          id: createBookingDto.alternativeSlot.id,
+          startTime: new Date(createBookingDto.alternativeSlot.startTime),
+          endTime: new Date(createBookingDto.alternativeSlot.endTime),
+          isAvailable: createBookingDto.alternativeSlot.isAvailable,
+        }
         : undefined;
 
       // Check if preferred slot is already booked (using database)
@@ -159,11 +159,11 @@ export class BookingController {
   ): Promise<{ slots: BookingResponseDto['preferredSlot'][]; waitlist?: boolean }> {
     const preference = body.day || body.timeOfDay
       ? {
-          day: body.day,
-          timeOfDay: body.timeOfDay === 'any' 
-            ? undefined 
-            : (body.timeOfDay as 'morning' | 'afternoon' | 'evening' | undefined),
-        }
+        day: body.day,
+        timeOfDay: body.timeOfDay === 'any'
+          ? undefined
+          : (body.timeOfDay as 'morning' | 'afternoon' | 'evening' | undefined),
+      }
       : undefined;
 
     // For reschedule, create a SlotService instance that excludes the current booking
@@ -171,7 +171,7 @@ export class BookingController {
     const getBookedSlotsFn = body.excludeBookingCode
       ? async () => await this.bookingService.getBookedSlots(body.excludeBookingCode)
       : async () => await this.bookingService.getBookedSlots();
-    
+
     const slotServiceForRequest = new SlotService(
       this.mockCalendar,
       getBookedSlotsFn,
@@ -180,7 +180,7 @@ export class BookingController {
     // For reschedule, get more slots (20) to give user more options
     const slotCount = body.excludeBookingCode ? 20 : 5;
     const availableSlots = await slotServiceForRequest.offerMultipleSlots(
-      slotCount, 
+      slotCount,
       preference,
     );
 
@@ -268,11 +268,11 @@ export class BookingController {
 
     const newAlternativeSlot: Slot | undefined = rescheduleBookingDto.newAlternativeSlot
       ? {
-          id: rescheduleBookingDto.newAlternativeSlot.id,
-          startTime: new Date(rescheduleBookingDto.newAlternativeSlot.startTime),
-          endTime: new Date(rescheduleBookingDto.newAlternativeSlot.endTime),
-          isAvailable: rescheduleBookingDto.newAlternativeSlot.isAvailable,
-        }
+        id: rescheduleBookingDto.newAlternativeSlot.id,
+        startTime: new Date(rescheduleBookingDto.newAlternativeSlot.startTime),
+        endTime: new Date(rescheduleBookingDto.newAlternativeSlot.endTime),
+        isAvailable: rescheduleBookingDto.newAlternativeSlot.isAvailable,
+      }
       : undefined;
 
     try {
@@ -309,19 +309,23 @@ export class BookingController {
       // Debug endpoint to see all bookings in database
       // This helps verify if bookings exist after server restart
       const entities = await this.bookingService.getAllBookingsFromDb();
+      const allBookings: Booking[] = [];
       
-      // Simplify: just return the entities directly without complex mapping
+      for (const entity of entities) {
+        try {
+          const booking = await this.bookingService.findByBookingCode(entity.bookingCode);
+          if (booking) {
+            allBookings.push(booking);
+          }
+        } catch (error) {
+          console.error(`Error loading booking ${entity.bookingCode}:`, error);
+          // Continue with other bookings even if one fails
+        }
+      }
+      
       return {
-        count: entities.length,
-        bookings: entities.map((entity) => ({
-          bookingCode: entity.bookingCode,
-          status: entity.status,
-          topic: entity.topic,
-          preferredSlotStartTime: entity.preferredSlotStartTime,
-          preferredSlotEndTime: entity.preferredSlotEndTime,
-          createdAt: entity.createdAt,
-          updatedAt: entity.updatedAt,
-        })),
+        count: allBookings.length,
+        bookings: allBookings.map((booking) => this.mapToResponseDto(booking)),
       };
     } catch (error) {
       console.error('Error in getAllBookings:', error);
