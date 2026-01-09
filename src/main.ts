@@ -28,12 +28,33 @@ async function bootstrap() {
     const app = await NestFactory.create(AppModule);
 
     // Enable CORS for frontend
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    // Support both Vercel deployment and local development
+    const frontendUrl = process.env.FRONTEND_URL;
+    const allowedOrigins = frontendUrl 
+        ? [frontendUrl, 'http://localhost:5173', 'http://localhost:3000']
+        : ['http://localhost:5173', 'http://localhost:3000'];
+    
     app.enableCors({
-        origin: frontendUrl,
+        origin: (origin, callback) => {
+            // Allow requests with no origin (like mobile apps or curl requests)
+            if (!origin) return callback(null, true);
+            
+            // Check if origin is in allowed list
+            if (allowedOrigins.includes(origin)) {
+                callback(null, true);
+            } 
+            // Allow Vercel preview deployments (if FRONTEND_URL is a Vercel domain)
+            else if (frontendUrl && origin.includes('.vercel.app')) {
+                callback(null, true);
+            } 
+            else {
+                console.error(`CORS blocked origin: ${origin}`);
+                callback(new Error('Not allowed by CORS'));
+            }
+        },
         credentials: true,
     });
-    console.log(`CORS enabled for: ${frontendUrl}`);
+    console.log(`CORS enabled for: ${allowedOrigins.join(', ')} (and Vercel preview deployments)`);
 
     // Enable global validation pipe
     app.useGlobalPipes(
@@ -56,7 +77,7 @@ async function bootstrap() {
     console.log(`  GET  /bookings/debug/all - Get all bookings`);
     console.log(`  POST /voice/session/start - Start voice session`);
     console.log(`✅ Server started successfully!`);
-    
+
     // Enable graceful shutdown
     const gracefulShutdown = async (signal: string) => {
         console.error(`⚠️ ${signal} received - shutting down gracefully`);
@@ -69,7 +90,7 @@ async function bootstrap() {
             process.exit(1);
         }
     };
-    
+
     process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 }
