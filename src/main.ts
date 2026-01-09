@@ -2,6 +2,17 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 
+// Global error handlers to prevent crashes
+process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+    console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+    // Log but don't exit - let the app continue running
+});
+
+process.on('uncaughtException', (error: Error) => {
+    console.error('❌ Uncaught Exception:', error);
+    // Log but don't exit immediately - let NestJS handle it
+});
+
 async function bootstrap() {
     // Log environment check at startup
     console.error('========================================');
@@ -45,6 +56,22 @@ async function bootstrap() {
     console.log(`  GET  /bookings/debug/all - Get all bookings`);
     console.log(`  POST /voice/session/start - Start voice session`);
     console.log(`✅ Server started successfully!`);
+    
+    // Enable graceful shutdown
+    const gracefulShutdown = async (signal: string) => {
+        console.error(`⚠️ ${signal} received - shutting down gracefully`);
+        try {
+            await app.close();
+            console.error('✅ Application closed successfully');
+            process.exit(0);
+        } catch (error) {
+            console.error('❌ Error during shutdown:', error);
+            process.exit(1);
+        }
+    };
+    
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 }
 
 bootstrap().catch((error) => {
