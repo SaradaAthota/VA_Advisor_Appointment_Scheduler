@@ -6,10 +6,29 @@ export class AppController {
   constructor(private dataSource: DataSource) {}
   @Get()
   getRoot() {
+    // Get database info directly from DataSource
+    const dbType = this.dataSource.options.type;
+    const dbUrl = (this.dataSource.options as any).url;
+    const dbName = this.dataSource.options.database;
+    const hasPostgresUrl = process.env.DATABASE_URL && (
+      process.env.DATABASE_URL.startsWith('postgresql://') ||
+      process.env.DATABASE_URL.startsWith('postgres://') ||
+      process.env.DATABASE_URL.includes('postgres.railway.internal')
+    );
+    
     return {
       message: 'VA Advisor Appointment Scheduler API',
       version: '1.0.0',
       status: 'running',
+      database: {
+        type: dbType,
+        detectedFromEnv: hasPostgresUrl ? 'postgresql' : 'sqlite',
+        hasDatabaseUrl: !!process.env.DATABASE_URL,
+        databaseUrlPreview: process.env.DATABASE_URL 
+          ? `${process.env.DATABASE_URL.substring(0, 50)}...` 
+          : 'not set',
+        actualConnection: dbUrl ? `${dbUrl.substring(0, 50)}...` : (dbName || 'unknown'),
+      },
       endpoints: {
         system: {
           'GET /health': 'Health check',
