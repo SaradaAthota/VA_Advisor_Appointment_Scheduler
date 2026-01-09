@@ -79,26 +79,28 @@ export class GoogleSheetsMcpService implements INotesMcp {
     slot: Slot,
     bookingCode: string,
   ): string[] {
-    const dateStr = date.toLocaleDateString('en-IN', {
-      timeZone: 'Asia/Kolkata',
+    // Dates are in UTC but represent IST time
+    // Use UTC components directly since they represent IST time values
+    const dateStr = new Date(Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth(),
+      date.getUTCDate()
+    )).toLocaleDateString('en-IN', {
+      timeZone: 'UTC',
       year: 'numeric',
       month: 'long',
       day: 'numeric',
     });
     
-    // Format start time
-    const startTimeStr = slot.startTime.toLocaleTimeString('en-IN', {
-      timeZone: 'Asia/Kolkata',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    // Format start time - use UTC components (which represent IST)
+    const startHours = slot.startTime.getUTCHours();
+    const startMinutes = slot.startTime.getUTCMinutes();
+    const startTimeStr = `${String(startHours).padStart(2, '0')}:${String(startMinutes).padStart(2, '0')}`;
     
-    // Format end time
-    const endTimeStr = slot.endTime.toLocaleTimeString('en-IN', {
-      timeZone: 'Asia/Kolkata',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    // Format end time - use UTC components (which represent IST)
+    const endHours = slot.endTime.getUTCHours();
+    const endMinutes = slot.endTime.getUTCMinutes();
+    const endTimeStr = `${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}`;
     
     // Combine as "Start Time - End Time"
     const timeRangeStr = `${startTimeStr} - ${endTimeStr}`;
@@ -232,24 +234,25 @@ export class GoogleSheetsMcpService implements INotesMcp {
         }
 
         // Format the updated row
-        const dateStr = newSlot.startTime.toLocaleDateString('en-IN', {
-          timeZone: 'Asia/Kolkata',
+        // Dates are in UTC but represent IST time - use UTC components directly
+        const dateStr = new Date(Date.UTC(
+          newSlot.startTime.getUTCFullYear(),
+          newSlot.startTime.getUTCMonth(),
+          newSlot.startTime.getUTCDate()
+        )).toLocaleDateString('en-IN', {
+          timeZone: 'UTC',
           year: 'numeric',
           month: 'long',
           day: 'numeric',
         });
         
-        const startTimeStr = newSlot.startTime.toLocaleTimeString('en-IN', {
-          timeZone: 'Asia/Kolkata',
-          hour: '2-digit',
-          minute: '2-digit',
-        });
+        const startHours = newSlot.startTime.getUTCHours();
+        const startMinutes = newSlot.startTime.getUTCMinutes();
+        const startTimeStr = `${String(startHours).padStart(2, '0')}:${String(startMinutes).padStart(2, '0')}`;
         
-        const endTimeStr = newSlot.endTime.toLocaleTimeString('en-IN', {
-          timeZone: 'Asia/Kolkata',
-          hour: '2-digit',
-          minute: '2-digit',
-        });
+        const endHours = newSlot.endTime.getUTCHours();
+        const endMinutes = newSlot.endTime.getUTCMinutes();
+        const endTimeStr = `${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}`;
         
         const timeRangeStr = `${startTimeStr} - ${endTimeStr}`;
 

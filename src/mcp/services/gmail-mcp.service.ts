@@ -82,17 +82,21 @@ export class GmailMcpService implements IEmailMcp {
     slot: Slot,
     contactDetails: EmailContactDetails,
   ): { subject: string; body: string } {
-    const dateStr = slot.startTime.toLocaleDateString('en-IN', {
-      timeZone: 'Asia/Kolkata',
+    // Dates are in UTC but represent IST time
+    // Use UTC components directly since they represent IST time values
+    const dateStr = new Date(Date.UTC(
+      slot.startTime.getUTCFullYear(),
+      slot.startTime.getUTCMonth(),
+      slot.startTime.getUTCDate()
+    )).toLocaleDateString('en-IN', {
+      timeZone: 'UTC',
       year: 'numeric',
       month: 'long',
       day: 'numeric',
     });
-    const timeStr = slot.startTime.toLocaleTimeString('en-IN', {
-      timeZone: 'Asia/Kolkata',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    const hours = slot.startTime.getUTCHours();
+    const minutes = slot.startTime.getUTCMinutes();
+    const timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 
     const subject = `New Advisor Appointment: ${topic} - ${bookingCode}`;
 
@@ -504,17 +508,21 @@ Advisor Appointment System`;
     bookingCode: string,
     slot: Slot,
   ): { subject: string; body: string } {
-    const dateStr = slot.startTime.toLocaleDateString('en-IN', {
-      timeZone: 'Asia/Kolkata',
+    // Dates are in UTC but represent IST time
+    // Use UTC components directly since they represent IST time values
+    const dateStr = new Date(Date.UTC(
+      slot.startTime.getUTCFullYear(),
+      slot.startTime.getUTCMonth(),
+      slot.startTime.getUTCDate()
+    )).toLocaleDateString('en-IN', {
+      timeZone: 'UTC',
       year: 'numeric',
       month: 'long',
       day: 'numeric',
     });
-    const timeStr = slot.startTime.toLocaleTimeString('en-IN', {
-      timeZone: 'Asia/Kolkata',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    const hours = slot.startTime.getUTCHours();
+    const minutes = slot.startTime.getUTCMinutes();
+    const timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 
     const subject = `[CANCELLED] Advisor Appointment: ${topic} - ${bookingCode}`;
 
