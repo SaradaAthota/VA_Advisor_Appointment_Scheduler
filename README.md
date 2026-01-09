@@ -668,11 +668,553 @@ Data Storage:
 - Ensure no trailing slashes in URLs
 - Verify credentials are enabled if using cookies
 
-## 🧪 Testing
+## 🧪 Comprehensive Testing Guide
 
-### Running Tests
+This section provides detailed instructions for testing all functionalities of the application in production.
 
-**Backend Tests:**
+---
+
+## 📋 Part 1: Backend API Testing
+
+### Prerequisites
+- Backend URL: `https://your-app-name.up.railway.app`
+- API testing tool: Browser, Postman, or cURL
+
+### 1. Health Check & System Info
+
+**Test Root Endpoint:**
+```bash
+curl https://your-app-name.up.railway.app/
+```
+**Expected:** JSON response with API information, database status, and available endpoints
+
+**Test Health Endpoint:**
+```bash
+curl https://your-app-name.up.railway.app/health
+```
+**Expected:** `{"status":"ok"}`
+
+**Test Database Info:**
+```bash
+curl https://your-app-name.up.railway.app/db-info
+```
+**Expected:** Database type (PostgreSQL), connection status, and environment info
+
+**Test Google API Status:**
+```bash
+curl https://your-app-name.up.railway.app/google-api-status
+```
+**Expected:** OAuth configuration status and MCP service status (mock/real)
+
+---
+
+### 2. Booking Creation
+
+**Create a New Booking:**
+```bash
+curl -X POST https://your-app-name.up.railway.app/bookings/create \
+  -H "Content-Type: application/json" \
+  -d '{
+    "topic": "KYC/Onboarding",
+    "preferredSlot": {
+      "id": "slot-2026-01-25-10:00",
+      "startTime": "2026-01-25T10:00:00.000Z",
+      "endTime": "2026-01-25T10:30:00.000Z",
+      "isAvailable": true
+    }
+  }'
+```
+**Expected:** JSON with `bookingCode` (e.g., `NL-XXXX`), `status: "TENTATIVE"`, and slot details
+
+**Test with Different Topics:**
+- `KYC/Onboarding`
+- `SIP/Mandates`
+- `Statements/Tax Docs`
+- `Withdrawals & Timelines`
+- `Account Changes/Nominee`
+
+**Verify:** Each booking gets a unique booking code
+
+---
+
+### 3. Booking Lookup
+
+**Get Booking by Code:**
+```bash
+curl https://your-app-name.up.railway.app/bookings/NL-XXXX
+```
+**Expected:** Full booking details including topic, slot, status, and contact details (if completed)
+
+**Test Invalid Booking Code:**
+```bash
+curl https://your-app-name.up.railway.app/bookings/INVALID
+```
+**Expected:** `404 Not Found` with "Booking not found" message
+
+**Test Cancelled Booking:**
+```bash
+curl https://your-app-name.up.railway.app/bookings/NL-CANCELLED
+```
+**Expected:** `410 Gone` with "This booking has been cancelled" message
+
+---
+
+### 4. Complete Booking
+
+**Complete a Booking:**
+```bash
+curl -X POST https://your-app-name.up.railway.app/bookings/NL-XXXX/complete \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contactDetails": {
+      "fullName": "John Doe",
+      "email": "john.doe@example.com",
+      "phone": "9876543210",
+      "additionalNotes": "Test booking completion"
+    }
+  }'
+```
+**Expected:** `{"success": true, "message": "Booking completed successfully"}`
+
+**Verify:**
+- Booking status changes to `CONFIRMED`
+- Google Calendar event is created (if APIs configured)
+- Google Sheets entry is added (if APIs configured)
+- Gmail draft is created (if APIs configured)
+
+**Test with Missing Fields:**
+```bash
+curl -X POST https://your-app-name.up.railway.app/bookings/NL-XXXX/complete \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contactDetails": {
+      "fullName": "John Doe"
+    }
+  }'
+```
+**Expected:** Validation error for missing required fields
+
+---
+
+### 5. Cancel Booking
+
+**Cancel a Booking:**
+```bash
+curl -X POST https://your-app-name.up.railway.app/bookings/NL-XXXX/cancel \
+  -H "Content-Type: application/json"
+```
+**Expected:** `{"success": true, "message": "Booking cancelled successfully"}`
+
+**Verify:**
+- Booking status changes to `CANCELLED`
+- Google Calendar event is updated (if APIs configured)
+- Google Sheets entry is updated (if APIs configured)
+- Cancellation email draft is created (if APIs configured)
+
+**Test Cancelling Already Cancelled Booking:**
+```bash
+curl -X POST https://your-app-name.up.railway.app/bookings/NL-CANCELLED/cancel
+```
+**Expected:** Error message indicating booking is already cancelled
+
+---
+
+### 6. Reschedule Booking
+
+**Reschedule a Booking:**
+```bash
+curl -X POST https://your-app-name.up.railway.app/bookings/NL-XXXX/reschedule \
+  -H "Content-Type: application/json" \
+  -d '{
+    "newSlot": {
+      "id": "slot-2026-01-26-14:00",
+      "startTime": "2026-01-26T14:00:00.000Z",
+      "endTime": "2026-01-26T14:30:00.000Z",
+      "isAvailable": true
+    }
+  }'
+```
+**Expected:** `{"success": true, "message": "Booking rescheduled successfully"}`
+
+**Verify:**
+- Booking slot is updated
+- Booking status changes to `RESCHEDULED`
+- Google Calendar event is updated (if APIs configured)
+- Google Sheets entry is updated (if APIs configured)
+
+**Test Rescheduling to Unavailable Slot:**
+```bash
+curl -X POST https://your-app-name.up.railway.app/bookings/NL-XXXX/reschedule \
+  -H "Content-Type: application/json" \
+  -d '{
+    "newSlot": {
+      "id": "slot-2026-01-25-10:00",
+      "startTime": "2026-01-25T10:00:00.000Z",
+      "endTime": "2026-01-25T10:30:00.000Z",
+      "isAvailable": false
+    }
+  }'
+```
+**Expected:** Error indicating slot is not available
+
+---
+
+### 7. Get Available Slots
+
+**Request Available Slots:**
+```bash
+curl -X POST https://your-app-name.up.railway.app/bookings/offer-slots \
+  -H "Content-Type: application/json" \
+  -d '{
+    "date": "2026-01-25",
+    "timePreference": "morning"
+  }'
+```
+**Expected:** Array of available slots for the specified date and time preference
+
+**Test Different Time Preferences:**
+- `morning` - 9:00 AM - 12:00 PM
+- `afternoon` - 12:00 PM - 3:00 PM
+- `evening` - 3:00 PM - 6:00 PM
+
+**Test with Specific Date:**
+```bash
+curl -X POST https://your-app-name.up.railway.app/bookings/offer-slots \
+  -H "Content-Type: application/json" \
+  -d '{
+    "date": "2026-01-25"
+  }'
+```
+**Expected:** All available slots for that date
+
+---
+
+### 8. Debug Endpoints
+
+**Get All Bookings (Debug):**
+```bash
+curl https://your-app-name.up.railway.app/bookings/debug/all
+```
+**Expected:** Array of all bookings in the database
+
+**Create Test Booking:**
+```bash
+curl -X POST https://your-app-name.up.railway.app/bookings/test/create \
+  -H "Content-Type: application/json"
+```
+**Expected:** A test booking with random data
+
+---
+
+## 🎤 Part 2: Voice Agent Testing
+
+### Prerequisites
+- Backend URL: `https://your-app-name.up.railway.app`
+- Frontend URL: `https://your-app-name.vercel.app` (or use API directly)
+
+### 1. Start a Conversation Session
+
+**Start New Session:**
+```bash
+curl -X POST https://your-app-name.up.railway.app/voice/session/start \
+  -H "Content-Type: application/json"
+```
+**Expected:** JSON with `sessionId` and `greeting` message
+
+**Save the `sessionId`** for subsequent requests
+
+---
+
+### 2. Send Text Messages
+
+**Send a Greeting:**
+```bash
+curl -X POST https://your-app-name.up.railway.app/voice/session/{sessionId}/message \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Hello"
+  }'
+```
+**Expected:** Assistant greeting and conversation start
+
+**Request Booking:**
+```bash
+curl -X POST https://your-app-name.up.railway.app/voice/session/{sessionId}/message \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "I want to book an appointment for KYC onboarding"
+  }'
+```
+**Expected:** Assistant asks for time preference
+
+**Provide Time Preference:**
+```bash
+curl -X POST https://your-app-name.up.railway.app/voice/session/{sessionId}/message \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Monday morning"
+  }'
+```
+**Expected:** Assistant offers available slots
+
+**Select a Slot:**
+```bash
+curl -X POST https://your-app-name.up.railway.app/voice/session/{sessionId}/message \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Slot number 1"
+  }'
+```
+**Expected:** Assistant asks for confirmation
+
+**Confirm Booking:**
+```bash
+curl -X POST https://your-app-name.up.railway.app/voice/session/{sessionId}/message \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Yes"
+  }'
+```
+**Expected:** Booking created with booking code
+
+---
+
+### 3. Send Voice Messages (STT + TTS)
+
+**Send Voice Message:**
+```bash
+curl -X POST https://your-app-name.up.railway.app/voice/session/{sessionId}/voice-message \
+  -H "Content-Type: multipart/form-data" \
+  -F "audio=@audio-file.webm"
+```
+**Expected:** 
+- Audio is transcribed (STT)
+- Assistant response is generated
+- Audio response is returned (TTS)
+
+**Note:** Requires a valid audio file (WebM, WAV, or MP3 format)
+
+---
+
+### 4. Get Conversation History
+
+**Get Full History:**
+```bash
+curl https://your-app-name.up.railway.app/voice/session/{sessionId}/history
+```
+**Expected:** Array of all messages in the conversation
+
+**Verify:**
+- User messages are included
+- Assistant responses are included
+- System messages (intent, state changes) are included
+- Timestamps are present
+
+---
+
+### 5. Get Session State
+
+**Get Current State:**
+```bash
+curl https://your-app-name.up.railway.app/voice/session/{sessionId}/state
+```
+**Expected:** Current conversation state, intent, and booking code (if booking created)
+
+**Verify:**
+- State transitions correctly (greeting → collecting_topic → collecting_time_preference → offering_slots → confirming_booking → completed)
+- Intent is recognized correctly
+- Booking code is present when booking is created
+
+---
+
+### 6. Get Session Debug Info
+
+**Get Debug Information:**
+```bash
+curl https://your-app-name.up.railway.app/voice/session/{sessionId}/debug
+```
+**Expected:** Detailed debug information including state, intent, history, and metadata
+
+---
+
+### 7. View All Conversation Logs
+
+**Get All Logs:**
+```bash
+curl https://your-app-name.up.railway.app/voice/logs/all
+```
+**Expected:** Array of all conversation logs from all sessions
+
+**Get Logs for Specific Session:**
+```bash
+curl https://your-app-name.up.railway.app/voice/logs/session/{sessionId}
+```
+**Expected:** All logs for the specified session
+
+---
+
+### 8. Test STT (Speech-to-Text) Directly
+
+**Test STT Endpoint:**
+```bash
+curl -X POST https://your-app-name.up.railway.app/voice/stt \
+  -H "Content-Type: multipart/form-data" \
+  -F "audio=@audio-file.webm"
+```
+**Expected:** Transcribed text from the audio file
+
+**Verify:**
+- Transcription is accurate
+- Handles different audio formats (WebM, WAV, MP3)
+- Returns error for invalid audio files
+
+---
+
+### 9. Test TTS (Text-to-Speech) Directly
+
+**Test TTS Endpoint:**
+```bash
+curl -X POST https://your-app-name.up.railway.app/voice/tts \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Hello, how can I help you today?"
+  }'
+```
+**Expected:** Audio file (MP3) as binary response
+
+**Verify:**
+- Audio is generated correctly
+- Can be played in audio player
+- Different voices work (if configured)
+
+---
+
+## 🎯 Part 3: Complete Booking Flow Testing
+
+### End-to-End Test Scenario
+
+**Step 1: Create Booking via Voice Agent**
+1. Start a conversation session
+2. Send: "I want to book an appointment for KYC onboarding"
+3. Send: "Monday morning"
+4. Send: "Slot number 1"
+5. Send: "Yes" to confirm
+6. **Verify:** Booking code is received
+
+**Step 2: Complete Booking**
+1. Use the booking code from Step 1
+2. Complete booking with contact details
+3. **Verify:** 
+   - Booking status is `CONFIRMED`
+   - Google Calendar event created (check calendar)
+   - Google Sheets entry added (check spreadsheet)
+   - Gmail draft created (check drafts)
+
+**Step 3: Reschedule Booking**
+1. Use the booking code from Step 1
+2. Reschedule to a different slot
+3. **Verify:**
+   - Booking status is `RESCHEDULED`
+   - Slot is updated
+   - Google Calendar event updated
+   - Google Sheets entry updated
+
+**Step 4: Cancel Booking**
+1. Use the booking code from Step 1
+2. Cancel the booking
+3. **Verify:**
+   - Booking status is `CANCELLED`
+   - Cannot lookup booking (returns 410)
+   - Google Calendar event updated
+   - Cancellation email draft created
+
+---
+
+## 🔍 Part 4: Database Verification
+
+### Check Database Contents
+
+**Via API:**
+```bash
+# Get all bookings
+curl https://your-app-name.up.railway.app/bookings/debug/all
+
+# Get all conversation logs
+curl https://your-app-name.up.railway.app/voice/logs/all
+```
+
+**Via Railway PostgreSQL:**
+1. Go to Railway dashboard
+2. Open PostgreSQL service
+3. Use Railway's database viewer or connect via CLI
+4. Query tables:
+   ```sql
+   SELECT * FROM bookings;
+   SELECT * FROM conversation_logs;
+   ```
+
+**Verify:**
+- Bookings are persisted correctly
+- Conversation logs are saved
+- Data survives redeployments
+
+---
+
+## 🔗 Part 5: Google API Integration Testing
+
+### Prerequisites
+- Google OAuth credentials configured
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` set in Railway
+
+### 1. Check API Status
+
+```bash
+curl https://your-app-name.up.railway.app/google-api-status
+```
+**Expected:** Shows which services are using real APIs vs mock mode
+
+### 2. Test Calendar Integration
+
+**Create a Booking:**
+1. Complete a booking via API or voice agent
+2. **Verify:** 
+   - Go to Google Calendar
+   - Event appears with correct title: "Advisor Q&A — {Topic} — {Code}"
+   - Time is correct (IST timezone)
+   - Event details are correct
+
+### 3. Test Sheets Integration
+
+**Create a Booking:**
+1. Complete a booking via API or voice agent
+2. **Verify:**
+   - Go to Google Sheets
+   - New row added with booking details
+   - Date and time are correct (IST)
+   - Booking code, topic, and contact details are present
+
+### 4. Test Gmail Integration
+
+**Create a Booking:**
+1. Complete a booking via API or voice agent
+2. **Verify:**
+   - Go to Gmail → Drafts
+   - Draft email created with booking details
+   - Subject line includes booking code
+   - Email body has correct date/time (IST)
+   - Contact details are included
+
+**Cancel a Booking:**
+1. Cancel a booking
+2. **Verify:**
+   - Cancellation email draft created
+   - Email mentions cancellation
+
+---
+
+## 🧪 Running Automated Tests
+
+### Backend Tests
 ```bash
 # Run all tests
 npm test
@@ -687,7 +1229,7 @@ npm run test:cov
 npm run test:e2e
 ```
 
-**Frontend Tests:**
+### Frontend Tests
 ```bash
 cd frontend
 
@@ -698,7 +1240,7 @@ npm test
 npm run test:coverage
 ```
 
-**Run Specific Test Suites:**
+### Run Specific Test Suites
 ```bash
 # Unit tests only
 npm test -- --testPathPattern="\.spec\.ts$"
