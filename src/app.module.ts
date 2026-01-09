@@ -38,18 +38,27 @@ import { AppController } from './app.controller';
         console.error('DATABASE_URL value (first 100 chars):', databaseUrl ? `${databaseUrl.substring(0, 100)}...` : 'NOT SET');
         console.error('========================================');
 
+        // More explicit check - check for postgres in the URL
         const hasPostgresUrl = databaseUrl && (
           databaseUrl.startsWith('postgresql://') ||
-          databaseUrl.startsWith('postgres://')
+          databaseUrl.startsWith('postgres://') ||
+          databaseUrl.includes('postgres.railway.internal') ||
+          databaseUrl.includes('@postgres')
         );
+        
+        console.error('hasPostgresUrl check result:', hasPostgresUrl);
+        console.error('databaseUrl type:', typeof databaseUrl);
+        console.error('databaseUrl length:', databaseUrl ? databaseUrl.length : 0);
         
         if (hasPostgresUrl) {
           console.error('✅✅✅ USING POSTGRESQL DATABASE ✅✅✅');
+          const syncValue = configService.get<string>('DATABASE_SYNC') === 'true' || process.env.DATABASE_SYNC === 'true';
+          console.error('DATABASE_SYNC value:', syncValue);
           return {
             type: 'postgres',
             url: databaseUrl,
             autoLoadEntities: true,
-            synchronize: configService.get<string>('DATABASE_SYNC') === 'true' || process.env.DATABASE_SYNC === 'true',
+            synchronize: syncValue,
             ssl: {
               rejectUnauthorized: false,
             },
@@ -58,6 +67,7 @@ import { AppController } from './app.controller';
         } else {
           console.error('⚠️⚠️⚠️ USING SQLITE DATABASE (PostgreSQL URL NOT FOUND) ⚠️⚠️⚠️');
           console.error('DATABASE_URL value:', databaseUrl || 'undefined');
+          console.error('DATABASE_URL type:', typeof databaseUrl);
           return {
             type: 'sqlite',
             database: configService.get<string>('DATABASE_PATH') || 'bookings.db',
