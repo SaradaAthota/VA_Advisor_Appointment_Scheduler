@@ -3,6 +3,15 @@ import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
+    // Log environment check at startup
+    console.error('========================================');
+    console.error('🚀 APPLICATION STARTING');
+    console.error('========================================');
+    console.error('DATABASE_URL exists:', !!process.env.DATABASE_URL);
+    console.error('DATABASE_URL preview:', process.env.DATABASE_URL ? `${process.env.DATABASE_URL.substring(0, 50)}...` : 'NOT SET');
+    console.error('NODE_ENV:', process.env.NODE_ENV);
+    console.error('========================================');
+    
     const app = await NestFactory.create(AppModule);
 
     // Enable CORS for frontend

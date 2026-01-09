@@ -27,11 +27,15 @@ import { AppController } from './app.controller';
           process.env.POSTGRES_URL ||
           process.env.POSTGRES_PRIVATE_URL;
 
-        // Debug logging
-        console.log('🔍 Database Configuration Check:');
-        console.log('   DATABASE_URL exists:', !!configService.get<string>('DATABASE_URL'));
-        console.log('   DATABASE_URL value:', databaseUrl ? `${databaseUrl.substring(0, 20)}...` : 'NOT SET');
-        console.log('   All env vars:', Object.keys(process.env).filter(k => k.includes('DATABASE') || k.includes('POSTGRES')).join(', '));
+        // Debug logging - Use console.error to ensure it shows in Railway logs
+        console.error('========================================');
+        console.error('🔍 DATABASE CONFIGURATION CHECK');
+        console.error('========================================');
+        console.error('DATABASE_URL from ConfigService:', !!configService.get<string>('DATABASE_URL'));
+        console.error('DATABASE_URL from process.env:', !!process.env.DATABASE_URL);
+        console.error('DATABASE_URL value (first 50 chars):', databaseUrl ? `${databaseUrl.substring(0, 50)}...` : 'NOT SET');
+        console.error('All DATABASE/POSTGRES env vars:', Object.keys(process.env).filter(k => k.includes('DATABASE') || k.includes('POSTGRES')).join(', '));
+        console.error('========================================');
 
         const hasPostgresUrl = databaseUrl && (
           databaseUrl.startsWith('postgresql://') ||
@@ -39,7 +43,7 @@ import { AppController } from './app.controller';
         );
         
         if (hasPostgresUrl) {
-          console.log('✅ Using PostgreSQL database');
+          console.error('✅✅✅ USING POSTGRESQL DATABASE ✅✅✅');
           return {
             type: 'postgres',
             url: databaseUrl,
@@ -51,8 +55,8 @@ import { AppController } from './app.controller';
             logging: configService.get<string>('NODE_ENV') !== 'production',
           };
         } else {
-          console.log('⚠️  Using SQLite database (PostgreSQL URL not found)');
-          console.log('   DATABASE_URL:', databaseUrl || 'undefined');
+          console.error('⚠️⚠️⚠️ USING SQLITE DATABASE (PostgreSQL URL NOT FOUND) ⚠️⚠️⚠️');
+          console.error('DATABASE_URL value:', databaseUrl || 'undefined');
           return {
             type: 'sqlite',
             database: configService.get<string>('DATABASE_PATH') || 'bookings.db',
